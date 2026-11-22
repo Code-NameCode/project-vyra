@@ -14,7 +14,9 @@ import {
   Eraser,
   Feather,
   File,
+  FileImage,
   FileText,
+  FileVideo,
   FlaskConical,
   Folder,
   FolderPlus,
@@ -22,7 +24,6 @@ import {
   Map,
   Mic,
   Minus,
-  Paperclip,
   Plus,
   Rocket,
   ScanSearch,
@@ -39,6 +40,7 @@ import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { uid } from "@/lib/id";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
@@ -60,6 +62,7 @@ import { AGENTS } from "@/data/agents";
 import type {
   AgentDef,
   Conversation,
+  FileAttachment,
   FileNode,
   SlashCommand,
 } from "@/lib/types";
@@ -147,10 +150,90 @@ interface RefItem {
 }
 const EMPTY_FILES: FileNode[] = [];
 const EMPTY_SKILLS: string[] = [];
+const EMPTY_ATTACHMENTS: FileAttachment[] = [];
 
 /** Strip a leading `/` from a slash command label (e.g. "/review" -> "review"). */
 function stripSlash(label: string): string {
   return label.replace(/^\//, "");
+}
+
+/* ---- file attachment helpers ---- */
+const TEXT_EXTS = new Set<string>([
+  "txt", "md", "markdown", "text", "log", "js", "jsx", "ts", "tsx", "mjs",
+  "cjs", "json", "html", "htm", "css", "scss", "sass", "less", "py", "rb",
+  "php", "go", "rs", "java", "c", "h", "cpp", "hpp", "cc", "cs", "swift",
+  "kt", "scala", "lua", "pl", "r", "dart", "sh", "bash", "zsh", "fish",
+  "ps1", "yml", "yaml", "toml", "ini", "cfg", "conf", "xml", "csv", "tsv",
+  "sql", "vue", "svelte", "env", "gitignore", "dockerfile", "makefile",
+]);
+
+/** Decide whether a file should be read as text (vs. binary data URL). */
+function isTextFile(name: string, mimeType: string): boolean {
+  if (mimeType.startsWith("text/")) return true;
+  if (
+    mimeType === "application/json" ||
+    mimeType === "application/javascript" ||
+    mimeType === "application/xml" ||
+    mimeType === "application/xhtml+xml" ||
+    mimeType === "application/typescript"
+  ) {
+    return true;
+  }
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return TEXT_EXTS.has(ext);
+}
+
+/** Pick a chip icon based on a file's mime type. */
+function attachmentIcon(mimeType: string): LucideIcon {
+  if (mimeType.startsWith("image/")) return FileImage;
+  if (mimeType.startsWith("video/")) return FileVideo;
+  if (
+    mimeType.startsWith("text/") ||
+    mimeType === "application/json" ||
+    mimeType === "application/javascript" ||
+    mimeType === "application/xml"
+  ) {
+    return FileText;
+  }
+  return File;
+}
+
+/** Truncate a filename to fit a chip (keep the extension visible). */
+function truncateName(name: string, max = 22): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf(".");
+  if (dot > 0 && name.length - dot <= 6) {
+    const ext = name.slice(dot);
+    const base = name.slice(0, dot);
+    return `${base.slice(0, max - ext.length - 1)}…${ext}`;
+  }
+  return `${name.slice(0, max - 1)}…`;
+}
+
+/** Read a single File into a FileAttachment (text or data URL). */
+function readFileAttachment(file: File): Promise<FileAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    const text = isTextFile(file.name, file.type);
+    reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("unexpected file reader result"));
+        return;
+      }
+      resolve({
+        id: uid("att"),
+        name: file.name,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        dataUrl: text ? undefined : result,
+        text: text ? result : undefined,
+      });
+    };
+    if (text) reader.readAsText(file);
+    else reader.readAsDataURL(file);
+  });
 }
 
 /**
@@ -191,6 +274,38 @@ export function Composer({ tabId }: { tabId: string }) {
     (s) => s.conversations[tabId]?.researchMode ?? false
   );
   const setResearchMode = useChatStore((s) => s.setResearchMode);
+
+  /* ---- file attachments (pending chips, sent with the next message) ---- */
+  const pendingAttachments = useChatStore(
+    (s) => s.conversations[tabId]?.pendingAttachments ?? EMPTY_ATTACHMENTS
+  );
+  const addAttachment = useChatStore((s) => s.addAttachment);
+  const removeAttachment = useChatStore((s) => s.removeAttachment);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const openFilePicker = React.useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = React.useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const list = Array.from(files);
+      // reset the input so selecting the same file again still fires onChange
+      e.target.value = "";
+      for (const file of list) {
+        try {
+          const att = await readFileAttachment(file);
+          addAttachment(tabId, att);
+          toast(`${att.name} attached`);
+        } catch {
+          toast.error(`Failed to read ${file.name}`);
+        }
+      }
+    },
+    [tabId, addAttachment]
+  );
 
   /* ---- Plan / Build mode (defensive: works with or without store support) ---- */
   const storeBuildMode = useChatStore(
@@ -786,6 +901,41 @@ export function Composer({ tabId }: { tabId: string }) {
           </div>
         )}
 
+        {/* pending file attachment chips (below skills, above the textarea) */}
+        {pendingAttachments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2 ws-fade-in">
+            {pendingAttachments.map((att) => {
+              const AttIcon = attachmentIcon(att.mimeType);
+              return (
+                <span
+                  key={att.id}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-[8px]",
+                    "border border-ws-border bg-hover pl-2 pr-1 py-1",
+                    "text-[12px] text-foreground max-w-[220px]"
+                  )}
+                  title={att.name}
+                >
+                  <AttIcon className="size-3.5 shrink-0 text-accent-hi" />
+                  <span className="truncate">{truncateName(att.name)}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${att.name}`}
+                    onClick={() => removeAttachment(tabId, att.id)}
+                    className={cn(
+                      "inline-flex items-center justify-center size-4 rounded-full",
+                      "text-ws-secondary hover:text-foreground hover:bg-card-ws",
+                      "transition-colors focus-ring shrink-0"
+                    )}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         <Textarea
           ref={taRef}
           value={draft}
@@ -807,44 +957,28 @@ export function Composer({ tabId }: { tabId: string }) {
         <div className="flex flex-wrap items-center justify-between gap-y-2 mt-2.5 gap-2">
           {/* left cluster: attach + Plan/Build selector + agent picker */}
           <div className="flex items-center gap-1.5">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Attach"
-                  className={cn(
-                    "inline-flex items-center justify-center size-8",
-                    "rounded-[8px] text-ws-secondary hover:bg-hover hover:text-foreground",
-                    "transition-colors focus-ring"
-                  )}
-                >
-                  <Plus className="size-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                sideOffset={6}
-                className={cn(
-                  "min-w-[160px] p-1 rounded-[10px]",
-                  "bg-popover border border-ws-border"
-                )}
-              >
-                <DropdownMenuItem
-                  onSelect={() => toast.info("Attachments are simulated")}
-                  className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
-                >
-                  <Paperclip className="size-4 text-ws-secondary" />
-                  Attach file
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => toast.info("Attachments are simulated")}
-                  className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
-                >
-                  <Plus className="size-4 text-ws-secondary" />
-                  Attach image
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              aria-hidden
+              tabIndex={-1}
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <button
+              type="button"
+              aria-label="Attach files"
+              title="Attach files"
+              onClick={openFilePicker}
+              className={cn(
+                "inline-flex items-center justify-center size-8",
+                "rounded-[8px] text-ws-secondary hover:bg-hover hover:text-foreground",
+                "transition-colors focus-ring"
+              )}
+            >
+              <Plus className="size-4" />
+            </button>
 
             {/* Plan / Build mode selector */}
             <div

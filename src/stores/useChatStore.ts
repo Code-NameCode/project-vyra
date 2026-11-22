@@ -9,6 +9,7 @@ import type {
   BuildMode,
   ChatMessage,
   Conversation,
+  FileAttachment,
   StreamEvent,
   Workspace,
 } from "@/lib/types";
@@ -43,6 +44,7 @@ function emptyConversation(tabId: string, modelId: string): Conversation {
     skills: [],
     agentId: "",
     researchMode: false,
+    pendingAttachments: [],
   };
 }
 
@@ -62,6 +64,9 @@ interface ChatState {
   clearSkills: (tabId: string) => void;
   setAgent: (tabId: string, agentId: string) => void;
   setResearchMode: (tabId: string, mode: boolean) => void;
+  addAttachment: (tabId: string, file: FileAttachment) => void;
+  removeAttachment: (tabId: string, fileId: string) => void;
+  clearAttachments: (tabId: string) => void;
   clearConversation: (tabId: string) => void;
   startFromTemplate: (prompt: string, title: string, templateId: string) => void;
   sendMessage: (tabId: string, text: string, modelId: string) => Promise<void>;
@@ -186,6 +191,50 @@ export const useChatStore = create<ChatState>()(
       };
     }),
 
+  addAttachment: (tabId, file) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: {
+            ...conv,
+            pendingAttachments: [...conv.pendingAttachments, file],
+          },
+        },
+      };
+    }),
+
+  removeAttachment: (tabId, fileId) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: {
+            ...conv,
+            pendingAttachments: conv.pendingAttachments.filter(
+              (f) => f.id !== fileId
+            ),
+          },
+        },
+      };
+    }),
+
+  clearAttachments: (tabId) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: { ...conv, pendingAttachments: [] },
+        },
+      };
+    }),
+
   clearConversation: (tabId) =>
     set((s) => {
       const conv = s.conversations[tabId];
@@ -226,11 +275,17 @@ export const useChatStore = create<ChatState>()(
 
     // ensure conversation + push user message
     get().ensure(tabId, modelId);
+
+    // snapshot pending attachments (cleared on send) — kept in-memory only
+    const pending =
+      get().conversations[tabId]?.pendingAttachments ?? [];
+
     const userMsg: ChatMessage = {
       id: uid("msg"),
       role: "user",
       content: trimmed,
       createdAt: Date.now(),
+      attachments: pending.length > 0 ? pending : undefined,
     };
     const assistantMsg: ChatMessage = {
       id: uid("msg"),
@@ -257,6 +312,7 @@ export const useChatStore = create<ChatState>()(
             // reset step cards for the new turn (avoids duplicate step ids
             // across turns; only the current run's steps are shown)
             steps: [],
+            pendingAttachments: [],
             messages: [...conv.messages, userMsg, assistantMsg],
           },
         },
@@ -534,7 +590,23 @@ export const useChatStore = create<ChatState>()(
   }),
     {
       name: "forge-conversations",
-      partialize: (s) => ({ conversations: s.conversations }),
+      partialize: (s) => ({
+        // strip attachments (base64 data URLs) + pendingAttachments to
+        // avoid blowing past localStorage quota; they are kept in-memory
+        // only and do not need to survive a reload.
+        conversations: Object.fromEntries(
+          Object.entries(s.conversations).map(([id, conv]) => [
+            id,
+            {
+              ...conv,
+              pendingAttachments: [],
+              messages: conv.messages.map((m) =>
+                m.attachments ? { ...m, attachments: undefined } : m
+              ),
+            },
+          ])
+        ),
+      }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         // a conversation that was mid-stream when the page closed is
@@ -548,6 +620,7 @@ export const useChatStore = create<ChatState>()(
           if (!Array.isArray(c.skills)) c.skills = [];
           if (typeof c.agentId !== "string") c.agentId = "";
           if (typeof c.researchMode !== "boolean") c.researchMode = false;
+          if (!Array.isArray(c.pendingAttachments)) c.pendingAttachments = [];
           c.steps = c.steps.map((st) =>
             st.status === "running" ? { ...st, status: "done" } : st
           );

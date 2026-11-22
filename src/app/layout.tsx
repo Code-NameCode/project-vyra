@@ -29,6 +29,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600&family=Open+Sans:wght@400;600&family=Poppins:wght@400;600&family=Lora:wght@400;600&family=Playfair+Display:wght@400;600&family=JetBrains+Mono:wght@400;500&family=Fira+Code:wght@400;500&family=Space+Grotesk:wght@400;600&display=swap"
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

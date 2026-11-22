@@ -6,6 +6,10 @@ import {
   Check,
   ChevronRight,
   Copy,
+  File,
+  FileImage,
+  FileText,
+  FileVideo,
   Folder,
   FolderPlus,
   History,
@@ -18,8 +22,10 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useMemo } from "react";
 import { useAppStore } from "@/stores/useAppStore";
 import { useProjectsStore } from "@/stores/useProjectsStore";
+import { useChatStore } from "@/stores/useChatStore";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -280,6 +286,9 @@ export function Sidebar() {
         )}
       </div>
 
+      {/* Artifacts section */}
+      <ArtifactsSection />
+
       {/* Legacy collapsible */}
       <Collapsible open={legacyOpen} onOpenChange={setLegacyOpen} className="mt-1">
         <CollapsibleTrigger asChild>
@@ -399,5 +408,98 @@ function MenuRow({ icon: Icon, label, onClick }: MenuRowProps) {
       <Icon className="size-4 shrink-0 text-ws-secondary" />
       <span className="truncate">{label}</span>
     </button>
+  );
+}
+
+/* ---------- Artifacts section ---------- */
+
+function fileIcon(mime: string): LucideIcon {
+  if (mime.startsWith("image/")) return FileImage;
+  if (mime.startsWith("video/")) return FileVideo;
+  if (mime.startsWith("text/") || mime.includes("json") || mime.includes("javascript") || mime.includes("typescript"))
+    return FileText;
+  return File;
+}
+
+function ArtifactsSection() {
+  const [open, setOpen] = useState(false);
+  const conversations = useChatStore((s) => s.conversations);
+  const projects = useProjectsStore((s) => s.projects);
+  const openRightTab = useAppStore((s) => s.openRightTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+
+  const artifacts = useMemo(() => {
+    const items: { name: string; path: string; source: string; tabId?: string; mimeType: string }[] = [];
+    // files from conversation workspaces
+    for (const conv of Object.values(conversations)) {
+      for (const f of conv.workspace.files) {
+        items.push({ name: f.name, path: f.path, source: conv.title || "Chat", tabId: conv.tabId, mimeType: "" });
+      }
+      // attachments from messages
+      for (const m of conv.messages) {
+        if (m.attachments) {
+          for (const a of m.attachments) {
+            items.push({ name: a.name, path: a.name, source: conv.title || "Chat", tabId: conv.tabId, mimeType: a.mimeType });
+          }
+        }
+      }
+    }
+    // files from project workspaces
+    for (const p of projects) {
+      for (const f of p.workspace.files) {
+        items.push({ name: f.name, path: f.path, source: p.name, mimeType: "" });
+      }
+    }
+    return items.slice(0, 30); // cap at 30 for the sidebar
+  }, [conversations, projects]);
+
+  if (artifacts.length === 0) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-1">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          aria-expanded={open}
+          className="focus-ring flex w-full items-center gap-1.5 rounded-[6px] px-2 py-1 text-[13px] text-ws-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+        >
+          <ChevronRight
+            className={cn(
+              "size-3.5 shrink-0 transition-transform duration-150",
+              open && "rotate-90"
+            )}
+          />
+          <FileText className="size-3.5 shrink-0 text-ws-disabled" />
+          <span>Artifacts</span>
+          <span className="ml-auto text-[12px] text-ws-disabled">
+            {artifacts.length}
+          </span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-0.5 ws-scroll flex max-h-[200px] flex-col gap-0.5 overflow-y-auto">
+          {artifacts.map((a, i) => {
+            const Icon = a.mimeType ? fileIcon(a.mimeType) : FileText;
+            return (
+              <button
+                key={`${a.source}-${a.path}-${i}`}
+                type="button"
+                title={`${a.source} — ${a.path}`}
+                onClick={() => {
+                  if (a.tabId) {
+                    setActiveTab(a.tabId);
+                    openRightTab("files");
+                  }
+                }}
+                className="focus-ring flex items-center gap-1.5 rounded-[6px] px-2 py-1 text-left text-[12px] text-ws-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+              >
+                <Icon className="size-3 shrink-0 text-ws-disabled" />
+                <span className="truncate">{a.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

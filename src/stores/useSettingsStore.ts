@@ -12,6 +12,8 @@ interface SettingsState {
   customVars: Record<string, string>;
   fontFamily: string;
   fontSize: string;
+  lineHeight: string;
+  letterSpacing: string;
   agentInstructions: string;
   skills: string[];
   skillsFolderPath: string;
@@ -26,6 +28,8 @@ interface SettingsState {
   resetTheme: () => void;
   setFontFamily: (v: string) => void;
   setFontSize: (v: string) => void;
+  setLineHeight: (v: string) => void;
+  setLetterSpacing: (v: string) => void;
   setAgentInstructions: (v: string) => void;
   setUseRealApi: (v: boolean) => void;
   setSkillsFolderPath: (v: string) => void;
@@ -58,6 +62,8 @@ export const useSettingsStore = create<SettingsState>()(
       customVars: {},
       fontFamily: "Inter",
       fontSize: "14",
+      lineHeight: "1.5",
+      letterSpacing: "0",
       agentInstructions: DEFAULT_INSTRUCTIONS,
       skills: [
         "Web search",
@@ -90,9 +96,13 @@ export const useSettingsStore = create<SettingsState>()(
           customVars: {},
           fontFamily: "Inter",
           fontSize: "14",
+          lineHeight: "1.5",
+          letterSpacing: "0",
         }),
       setFontFamily: (v) => set({ fontFamily: v }),
       setFontSize: (v) => set({ fontSize: v }),
+      setLineHeight: (v) => set({ lineHeight: v }),
+      setLetterSpacing: (v) => set({ letterSpacing: v }),
       setAgentInstructions: (v) => set({ agentInstructions: v }),
       setUseRealApi: (v) => set({ useRealApi: v }),
       setSkillsFolderPath: (v) => set({ skillsFolderPath: v }),

@@ -31,12 +31,22 @@ export type RightPanelView =
 
 export type MessageRole = "user" | "assistant" | "system";
 
+export interface FileAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl?: string; // base64 data URL for binary files (images, videos, PDFs)
+  text?: string; // text content for text/code files
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: number;
   streaming?: boolean;
+  attachments?: FileAttachment[];
 }
 
 export type StepStatus = "running" | "done" | "error";
@@ -109,6 +119,7 @@ export interface Conversation {
   skills: string[];
   agentId: string;
   researchMode: boolean;
+  pendingAttachments: FileAttachment[];
 }
 
 export interface AgentDef {

@@ -1,0 +1,1045 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import {
+     5→  ArrowUp,
+     6→  BookOpen,
+     7→  Bot,
+     8→  Brain,
+     9→  Check,
+    10→  ChevronDown,
+    11→  CircleHelp,
+    12→  Code2,
+    13→  Cpu,
+    14→  Eraser,
+    15→  Feather,
+    16→  File,
+    17→  FileText,
+    18→  FlaskConical,
+    19→  Folder,
+    20→  FolderPlus,
+    21→  Hammer,
+    22→  Map,
+    23→  Mic,
+    24→  Minus,
+    25→  Paperclip,
+    26→  Plus,
+    27→  Rocket,
+    28→  ScanSearch,
+    29→  Shuffle,
+    30→  Sparkles,
+    31→  Square,
+    32→  Telescope,
+    33→  TerminalSquare,
+    34→  Wrench,
+    35→  X,
+    36→  Zap,
+    37→} from "lucide-react";
+    38→import type { LucideIcon } from "lucide-react";
+    39→import { toast } from "sonner";
+    40→
+    41→import { cn } from "@/lib/utils";
+    42→import { Textarea } from "@/components/ui/textarea";
+    43→import {
+    44→  DropdownMenu,
+    45→  DropdownMenuContent,
+    46→  DropdownMenuItem,
+    47→  DropdownMenuTrigger,
+    48→} from "@/components/ui/dropdown-menu";
+    49→import {
+    50→  Popover,
+    51→  PopoverContent,
+    52→  PopoverTrigger,
+    53→} from "@/components/ui/popover";
+    54→import { useChatStore } from "@/stores/useChatStore";
+    55→import { useAppStore } from "@/stores/useAppStore";
+    56→import { useProjectsStore } from "@/stores/useProjectsStore";
+    57→import { useSettingsStore } from "@/stores/useSettingsStore";
+    58→import { SLASH_COMMANDS } from "@/data/slashCommands";
+    59→import { AGENTS } from "@/data/agents";
+    60→import type {
+    61→  AgentDef,
+    62→  Conversation,
+    63→  FileNode,
+    64→  SlashCommand,
+    65→} from "@/lib/types";
+    66→import { ModelPicker } from "./ModelPicker";
+    67→
+    68→/* ---- minimal Web Speech API typing (no `any`) ---- */
+    69→interface SpeechResultLike {
+    70→  0: { transcript: string };
+    71→  isFinal: boolean;
+    72→  length: number;
+    73→}
+    74→interface SpeechEventLike {
+    75→  results: ArrayLike<SpeechResultLike>;
+    76→}
+    77→interface SpeechRecognitionLike {
+    78→  lang: string;
+    79→  continuous: boolean;
+    80→  interimResults: boolean;
+    81→  start: () => void;
+    82→  stop: () => void;
+    83→  abort: () => void;
+    84→  onresult: ((event: SpeechEventLike) => void) | null;
+    85→  onerror: ((event: unknown) => void) | null;
+    86→  onend: (() => void) | null;
+    87→}
+    88→type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+    89→type WindowWithSpeech = Window & {
+    90→  SpeechRecognition?: SpeechRecognitionCtor;
+    91→  webkitSpeechRecognition?: SpeechRecognitionCtor;
+    92→};
+    93→
+    94→/* ---- Plan / Build mode ---- */
+    95→type BuildMode = "plan" | "build";
+    96→// Other modules may extend Conversation/ChatState with buildMode. Access
+    97→// defensively so the Composer keeps working whether or not the store has
+    98→// been augmented yet.
+    99→type ConvWithBuild = Conversation & { buildMode?: BuildMode };
+   100→interface ChatStoreWithBuild {
+   101→  setBuildMode?: (tabId: string, mode: BuildMode) => void;
+   102→}
+   103→
+   104→/* ---- skill icon map for slash commands ---- */
+   105→const SKILL_ICON: Record<string, LucideIcon> = {
+   106→  brain: Brain,
+   107→  hammer: Hammer,
+   108→  scan: ScanSearch,
+   109→  flask: FlaskConical,
+   110→  wrench: Wrench,
+   111→  book: BookOpen,
+   112→  shuffle: Shuffle,
+   113→  doc: FileText,
+   114→  rocket: Rocket,
+   115→  eraser: Eraser,
+   116→  cpu: Cpu,
+   117→  help: CircleHelp,
+   118→};
+   119→function skillIcon(key?: string): LucideIcon {
+   120→  if (key && SKILL_ICON[key]) return SKILL_ICON[key];
+   121→  return Sparkles;
+   122→}
+   123→
+   124→/* ---- agent icon map ---- */
+   125→const AGENT_ICON: Record<string, LucideIcon> = {
+   126→  terminal: TerminalSquare,
+   127→  bot: Bot,
+   128→  code: Code2,
+   129→  zap: Zap,
+   130→  brain: Brain,
+   131→  shuffle: Shuffle,
+   132→  feather: Feather,
+   133→  flask: FlaskConical,
+   134→};
+   135→function agentIcon(key?: string): LucideIcon {
+   136→  if (key && AGENT_ICON[key]) return AGENT_ICON[key];
+   137→  return Bot;
+   138→}
+   139→
+   140→/* ---- @ context reference item ---- */
+   141→type SlashCommandWithIcon = SlashCommand & { icon?: string };
+   142→interface RefItem {
+   143→  kind: "file" | "project";
+   144→  name: string;
+   145→  path: string;
+   146→  icon: LucideIcon;
+   147→}
+   148→const EMPTY_FILES: FileNode[] = [];
+   149→const EMPTY_SKILLS: string[] = [];
+   150→
+   151→/** Strip a leading `/` from a slash command label (e.g. "/review" -> "review"). */
+   152→function stripSlash(label: string): string {
+   153→  return label.replace(/^\//, "");
+   154→}
+   155→
+   156→/**
+   157→ * Composer — the core prompt input.
+   158→ * Auto-growing textarea, slash command popup (with skill icons) that adds
+   159→ * action skills as removable chips, Codex-style `@` context referencing,
+   160→ * attach menu, Plan/Build mode selector, agent picker chip, model picker
+   161→ * chip, and a send/stop/voice button.
+   162→ */
+   163→export function Composer({ tabId }: { tabId: string }) {
+   164→  const ensure = useChatStore((s) => s.ensure);
+   165→  const draft = useChatStore((s) => s.conversations[tabId]?.composerDraft ?? "");
+   166→  const streaming = useChatStore(
+   167→    (s) => s.conversations[tabId]?.streaming ?? false
+   168→  );
+   169→  const convModelId = useChatStore((s) => s.conversations[tabId]?.modelId);
+   170→  const defaultModelId = useSettingsStore((s) => s.defaultModelId);
+   171→  const setComposerDraft = useChatStore((s) => s.setComposerDraft);
+   172→  const sendMessage = useChatStore((s) => s.sendMessage);
+   173→  const stopStreaming = useChatStore((s) => s.stopStreaming);
+   174→  const clearConversation = useChatStore((s) => s.clearConversation);
+   175→
+   176→  /* ---- skills (multi-chip) ---- */
+   177→  const skills = useChatStore(
+   178→    (s) => s.conversations[tabId]?.skills ?? EMPTY_SKILLS
+   179→  );
+   180→  const addSkill = useChatStore((s) => s.addSkill);
+   181→  const removeSkill = useChatStore((s) => s.removeSkill);
+   182→
+   183→  /* ---- agent picker ---- */
+   184→  const agentId = useChatStore(
+   185→    (s) => s.conversations[tabId]?.agentId ?? ""
+   186→  );
+   187→  const setAgent = useChatStore((s) => s.setAgent);
+   188→
+   189→  /* ---- Deep research mode ---- */
+   190→  const researchMode = useChatStore(
+   191→    (s) => s.conversations[tabId]?.researchMode ?? false
+   192→  );
+   193→  const setResearchMode = useChatStore((s) => s.setResearchMode);
+   194→
+   195→  /* ---- Plan / Build mode (defensive: works with or without store support) ---- */
+   196→  const storeBuildMode = useChatStore(
+   197→    (s) =>
+   198→      (s.conversations[tabId] as ConvWithBuild | undefined)?.buildMode ??
+   199→      ("build" as BuildMode)
+   200→  );
+   201→  const storeSetBuildMode = useChatStore(
+   202→    (s) => (s as unknown as ChatStoreWithBuild).setBuildMode
+   203→  );
+   204→  const [localBuildMode, setLocalBuildMode] =
+   205→    React.useState<BuildMode>("build");
+   206→  const buildMode: BuildMode = storeSetBuildMode
+   207→    ? (storeBuildMode as BuildMode)
+   208→    : localBuildMode;
+   209→  const setBuildMode = React.useCallback(
+   210→    (mode: BuildMode) => {
+   211→      if (storeSetBuildMode) storeSetBuildMode(tabId, mode);
+   212→      else setLocalBuildMode(mode);
+   213→    },
+   214→    [storeSetBuildMode, tabId]
+   215→  );
+   216→
+   217→  /* ---- active workspace (reactive) for `@` referencing ---- */
+   218→  const projectId = useAppStore(
+   219→    (s) => s.tabs.find((t) => t.id === tabId)?.projectId
+   220→  );
+   221→  const projects = useProjectsStore((s) => s.projects);
+   222→  const setTabProject = useAppStore((s) => s.setTabProject);
+   223→  const addProject = useProjectsStore((s) => s.addProject);
+   224→  const activeProject = projects.find((p) => p.id === projectId);
+   225→  const convFiles = useChatStore(
+   226→    (s) => s.conversations[tabId]?.workspace.files
+   227→  );
+   228→
+   229→  const files = React.useMemo<FileNode[]>(() => {
+   230→    if (projectId) {
+   231→      return (
+   232→        projects.find((p) => p.id === projectId)?.workspace.files ??
+   233→        EMPTY_FILES
+   234→      );
+   235→    }
+   236→    return convFiles ?? EMPTY_FILES;
+   237→  }, [projectId, projects, convFiles]);
+   238→
+   239→  const refItems = React.useMemo<RefItem[]>(() => {
+   240→    const fileItems: RefItem[] = files.map((f) => ({
+   241→      kind: "file",
+   242→      name: f.name,
+   243→      path: f.path,
+   244→      icon: File,
+   245→    }));
+   246→    const projItems: RefItem[] = projects.map((p) => ({
+   247→      kind: "project",
+   248→      name: p.name,
+   249→      path: p.name,
+   250→      icon: Folder,
+   251→    }));
+   252→    return [...fileItems, ...projItems];
+   253→  }, [files, projects]);
+   254→
+   255→  const modelId = convModelId ?? defaultModelId;
+   256→
+   257→  const taRef = React.useRef<HTMLTextAreaElement>(null);
+   258→  const [modelOpen, setModelOpen] = React.useState(false);
+   259→  const [agentOpen, setAgentOpen] = React.useState(false);
+   260→  const [slashSuppressed, setSlashSuppressed] = React.useState(false);
+   261→  const [selIndex, setSelIndex] = React.useState(0);
+   262→  const [atSuppressed, setAtSuppressed] = React.useState(false);
+   263→  const [atIndex, setAtIndex] = React.useState(0);
+   264→
+   265→  // ensure a conversation object exists so modelId/draft are stable
+   266→  React.useEffect(() => {
+   267→    ensure(tabId);
+   268→  }, [tabId, ensure]);
+   269→
+   270→  // auto-grow textarea whenever draft changes (covers typing + external updates)
+   271→  React.useLayoutEffect(() => {
+   272→    const ta = taRef.current;
+   273→    if (!ta) return;
+   274→    ta.style.height = "auto";
+   275→    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+   276→  }, [draft]);
+   277→
+   278→  // reset slash + @ suppression + selection whenever draft changes
+   279→  React.useEffect(() => {
+   280→    setSlashSuppressed(false);
+   281→    setSelIndex(0);
+   282→    setAtSuppressed(false);
+   283→    setAtIndex(0);
+   284→  }, [draft]);
+   285→
+   286→  /* ---- slash command popup derivation ---- */
+   287→  const slashWithIcons = React.useMemo<SlashCommandWithIcon[]>(
+   288→    () => SLASH_COMMANDS as SlashCommandWithIcon[],
+   289→    []
+   290→  );
+   291→  const isSlashDraft =
+   292→    draft.startsWith("/") &&
+   293→    !draft.slice(1).includes(" ") &&
+   294→    !streaming;
+   295→  const filtered = React.useMemo<SlashCommand[]>(() => {
+   296→    if (!isSlashDraft) return [];
+   297→    const q = draft.slice(1).toLowerCase();
+   298→    if (!q) return slashWithIcons;
+   299→    return slashWithIcons.filter(
+   300→      (c) =>
+   301→        c.label.toLowerCase().includes(q) ||
+   302→        c.id.toLowerCase().includes(q) ||
+   303→        c.hint.toLowerCase().includes(q)
+   304→    );
+   305→  }, [isSlashDraft, draft, slashWithIcons]);
+   306→  const slashVisible = isSlashDraft && !slashSuppressed && filtered.length > 0;
+   307→
+   308→  /* ---- @ context reference popup derivation ---- */
+   309→  const atQuery = React.useMemo<{ index: number; query: string } | null>(() => {
+   310→    const lastAt = draft.lastIndexOf("@");
+   311→    if (lastAt === -1) return null;
+   312→    const after = draft.slice(lastAt + 1);
+   313→    // the query is the text from the last "@" to the end of the draft;
+   314→    // any whitespace terminates it.
+   315→    if (/\s/.test(after)) return null;
+   316→    return { index: lastAt, query: after };
+   317→  }, [draft]);
+   318→
+   319→  const atFiltered = React.useMemo<RefItem[]>(() => {
+   320→    if (!atQuery) return [];
+   321→    const q = atQuery.query.toLowerCase();
+   322→    const list = q
+   323→      ? refItems.filter(
+   324→          (it) =>
+   325→            it.name.toLowerCase().includes(q) ||
+   326→            it.path.toLowerCase().includes(q)
+   327→        )
+   328→      : refItems;
+   329→    return list.slice(0, 12);
+   330→  }, [atQuery, refItems]);
+   331→
+   332→  const atVisible =
+   333→    !streaming &&
+   334→    !slashVisible &&
+   335→    atQuery !== null &&
+   336→    !atSuppressed &&
+   337→    atFiltered.length > 0;
+   338→
+   339→  // keep atIndex within bounds when the filtered list shrinks
+   340→  React.useEffect(() => {
+   341→    if (atFiltered.length > 0 && atIndex >= atFiltered.length) {
+   342→      setAtIndex(0);
+   343→    }
+   344→  }, [atFiltered, atIndex]);
+   345→
+   346→  /* ---- actions ---- */
+   347→  const handleSend = React.useCallback(() => {
+   348→    if (streaming) return;
+   349→    const text = useChatStore.getState().conversations[tabId]?.composerDraft ?? "";
+   350→    if (!text.trim()) return;
+   351→    void sendMessage(tabId, text, modelId);
+   352→  }, [streaming, tabId, modelId, sendMessage]);
+   353→
+   354→  const selectCommand = React.useCallback(
+   355→    (cmd: SlashCommand) => {
+   356→      // Read the live draft + skills from the store to avoid stale closures.
+   357→      const currentDraft =
+   358→        useChatStore.getState().conversations[tabId]?.composerDraft ?? "";
+   359→      const beforeSlash = currentDraft.slice(0, currentDraft.lastIndexOf("/"));
+   360→      const focusTextarea = () =>
+   361→        requestAnimationFrame(() => taRef.current?.focus());
+   362→
+   363→      if (cmd.id === "model") {
+   364→        setComposerDraft(tabId, "");
+   365→        setModelOpen(true);
+   366→        return;
+   367→      }
+   368→      if (cmd.id === "clear") {
+   369→        clearConversation(tabId);
+   370→        setComposerDraft(tabId, "");
+   371→        toast("Conversation cleared");
+   372→        return;
+   373→      }
+   374→      if (cmd.id === "help") {
+   375→        setComposerDraft(tabId, "");
+   376→        toast("Press / for commands · Enter to send · Shift+Enter for newline", {
+   377→          duration: 4000,
+   378→        });
+   379→        return;
+   380→      }
+   381→      if (cmd.id === "plan") {
+   382→        setBuildMode("plan");
+   383→        setComposerDraft(tabId, beforeSlash);
+   384→        toast("Switched to Plan");
+   385→        focusTextarea();
+   386→        return;
+   387→      }
+   388→      if (cmd.id === "build") {
+   389→        setBuildMode("build");
+   390→        setComposerDraft(tabId, beforeSlash);
+   391→        toast("Switched to Build");
+   392→        focusTextarea();
+   393→        return;
+   394→      }
+   395→      // action skills (review, test, fix, explain, refactor, document, init):
+   396→      // add as a removable chip instead of inserting text.
+   397→      const currentSkills =
+   398→        useChatStore.getState().conversations[tabId]?.skills ?? [];
+   399→      if (currentSkills.includes(cmd.id)) {
+   400→        toast("Already added");
+   401→      } else {
+   402→        addSkill(tabId, cmd.id);
+   403→        toast(`${stripSlash(cmd.label)} skill added`);
+   404→      }
+   405→      setComposerDraft(tabId, beforeSlash);
+   406→      focusTextarea();
+   407→    },
+   408→    [
+   409→      tabId,
+   410→      setComposerDraft,
+   411→      clearConversation,
+   412→      addSkill,
+   413→      setBuildMode,
+   414→    ]
+   415→  );
+   416→
+   417→  const selectRef = React.useCallback(
+   418→    (item: RefItem) => {
+   419→      if (!atQuery) return;
+   420→      const before = draft.slice(0, atQuery.index);
+   421→      const next = `${before}@${item.name} `;
+   422→      setComposerDraft(tabId, next);
+   423→      requestAnimationFrame(() => taRef.current?.focus());
+   424→    },
+   425→    [atQuery, draft, setComposerDraft, tabId]
+   426→  );
+   427→
+   428→  /* ---- keyboard ---- */
+   429→  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+   430→    if (slashVisible) {
+   431→      if (e.key === "ArrowDown") {
+   432→        e.preventDefault();
+   433→        setSelIndex((i) => (i + 1) % filtered.length);
+   434→        return;
+   435→      }
+   436→      if (e.key === "ArrowUp") {
+   437→        e.preventDefault();
+   438→        setSelIndex((i) => (i - 1 + filtered.length) % filtered.length);
+   439→        return;
+   440→      }
+   441→      if (e.key === "Enter") {
+   442→        e.preventDefault();
+   443→        const cmd = filtered[selIndex] ?? filtered[0];
+   444→        if (cmd) selectCommand(cmd);
+   445→        return;
+   446→      }
+   447→      if (e.key === "Escape") {
+   448→        e.preventDefault();
+   449→        setSlashSuppressed(true);
+   450→        return;
+   451→      }
+   452→      if (e.key === "Tab") {
+   453→        e.preventDefault();
+   454→        const cmd = filtered[selIndex] ?? filtered[0];
+   455→        if (cmd) selectCommand(cmd);
+   456→        return;
+   457→      }
+   458→    }
+   459→    if (atVisible) {
+   460→      if (e.key === "ArrowDown") {
+   461→        e.preventDefault();
+   462→        setAtIndex((i) => (i + 1) % atFiltered.length);
+   463→        return;
+   464→      }
+   465→      if (e.key === "ArrowUp") {
+   466→        e.preventDefault();
+   467→        setAtIndex((i) => (i - 1 + atFiltered.length) % atFiltered.length);
+   468→        return;
+   469→      }
+   470→      if (e.key === "Enter" || e.key === "Tab") {
+   471→        e.preventDefault();
+   472→        const item = atFiltered[atIndex] ?? atFiltered[0];
+   473→        if (item) selectRef(item);
+   474→        return;
+   475→      }
+   476→      if (e.key === "Escape") {
+   477→        e.preventDefault();
+   478→        setAtSuppressed(true);
+   479→        return;
+   480→      }
+   481→    }
+   482→    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+   483→      if (!streaming && draft.trim()) {
+   484→        e.preventDefault();
+   485→        handleSend();
+   486→      }
+   487→    }
+   488→  };
+   489→
+   490→  /* ---- voice ---- */
+   491→  const startVoice = React.useCallback(() => {
+   492→    const w = window as WindowWithSpeech;
+   493→    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+   494→    if (!Ctor) {
+   495→      toast.error("Voice input not supported in this browser");
+   496→      return;
+   497→    }
+   498→    try {
+   499→      const rec = new Ctor();
+   500→      rec.lang = "en-US";
+   501→      rec.continuous = false;
+   502→      rec.interimResults = false;
+   503→      rec.onresult = (event: SpeechEventLike) => {
+   504→        let transcript = "";
+   505→        for (let i = 0; i < event.results.length; i++) {
+   506→          transcript += event.results[i][0].transcript;
+   507→        }
+   508→        if (!transcript) return;
+   509→        const cur =
+   510→          useChatStore.getState().conversations[tabId]?.composerDraft ?? "";
+   511→        const next = (cur ? cur + " " : "") + transcript.trim();
+   512→        setComposerDraft(tabId, next);
+   513→      };
+   514→      rec.onerror = () => {
+   515→        toast.error("Voice input failed");
+   516→      };
+   517→      rec.start();
+   518→      toast("Listening…", { duration: 2500 });
+   519→    } catch {
+   520→      toast.error("Voice input could not start");
+   521→    }
+   522→  }, [tabId, setComposerDraft]);
+   523→
+   524→  /* ---- send button state ---- */
+   525→  const canSend = draft.trim().length > 0;
+   526→  const sendState: "send" | "stop" | "voice" = streaming
+   527→    ? "stop"
+   528→    : canSend
+   529→    ? "send"
+   530→    : "voice";
+   531→
+   532→  const onSendClick = () => {
+   533→    if (sendState === "stop") stopStreaming(tabId);
+   534→    else if (sendState === "send") handleSend();
+   535→    else startVoice();
+   536→  };
+   537→
+   538→  const SendIcon = sendState === "stop" ? Square : sendState === "send" ? ArrowUp : Mic;
+   539→  const sendLabel = sendState === "stop" ? "Stop" : sendState === "send" ? "Send" : "Voice";
+   540→
+   541→  /* ---- active agent (for the trigger chip) ---- */
+   542→  const activeAgent: AgentDef | undefined = agentId
+   543→    ? AGENTS.find((a) => a.id === agentId)
+   544→    : undefined;
+   545→  const agentTriggerName = activeAgent ? activeAgent.name : "Agent";
+   546→
+   547→  const handleAgentSelect = (id: string, name: string) => {
+   548→    setAgent(tabId, id);
+   549→    setAgentOpen(false);
+   550→    toast(`${name} selected`);
+   551→  };
+   552→
+   553→  return (
+   554→    <div className="relative w-full">
+   555→      {/* slash command popup (above the box) */}
+   556→      {slashVisible && (
+   557→        <div
+   558→          className={cn(
+   559→            "absolute bottom-full mb-2 left-0 w-[280px] max-w-[calc(100vw-2rem)] z-30",
+   560→            "rounded-[12px] border border-ws-border bg-popover p-1.5 ws-fade-in",
+   561→            "shadow-2xl max-h-[260px] overflow-y-auto ws-scroll"
+   562→          )}
+   563→          role="listbox"
+   564→        >
+   565→          {filtered.map((c, i) => {
+   566→            const Icon = skillIcon(
+   567→              (c as SlashCommandWithIcon).icon
+   568→            );
+   569→            return (
+   570→              <button
+   571→                type="button"
+   572→                key={c.id}
+   573→                onMouseEnter={() => setSelIndex(i)}
+   574→                onClick={() => selectCommand(c)}
+   575→                className={cn(
+   576→                  "w-full flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 cursor-pointer",
+   577→                  "transition-colors text-left",
+   578→                  i === selIndex ? "bg-hover" : "hover:bg-hover"
+   579→                )}
+   580→              >
+   581→                <Icon
+   582→                  className={cn(
+   583→                    "size-4 shrink-0",
+   584→                    i === selIndex ? "text-accent-hi" : "text-ws-secondary"
+   585→                  )}
+   586→                />
+   587→                <div className="min-w-0">
+   588→                  <div className="text-[13px] font-medium text-foreground">
+   589→                    {c.label}
+   590→                  </div>
+   591→                  <div className="text-[12px] text-ws-secondary line-clamp-1">
+   592→                    {c.description}
+   593→                  </div>
+   594→                </div>
+   595→              </button>
+   596→            );
+   597→          })}
+   598→        </div>
+   599→      )}
+   600→
+   601→      {/* `@` context reference popup (above the box) */}
+   602→      {atVisible && (
+   603→        <div
+   604→          className={cn(
+   605→            "absolute bottom-full mb-2 left-0 w-[280px] max-w-[calc(100vw-2rem)] z-30",
+   606→            "rounded-[12px] border border-ws-border bg-popover p-1.5 ws-fade-in",
+   607→            "shadow-2xl max-h-[280px] overflow-y-auto ws-scroll"
+   608→          )}
+   609→          role="listbox"
+   610→        >
+   611→          {atFiltered.map((item, i) => {
+   612→            const ItemIcon = item.icon;
+   613→            return (
+   614→              <button
+   615→                type="button"
+   616→                key={`${item.kind}-${item.path}`}
+   617→                onMouseEnter={() => setAtIndex(i)}
+   618→                onClick={() => selectRef(item)}
+   619→                className={cn(
+   620→                  "w-full flex items-center gap-2 rounded-[8px] px-2.5 py-2",
+   621→                  "text-left cursor-pointer transition-colors",
+   622→                  i === atIndex ? "bg-hover" : "hover:bg-hover"
+   623→                )}
+   624→              >
+   625→                <ItemIcon className="size-3.5 shrink-0 text-ws-secondary" />
+   626→                <div className="min-w-0 flex-1">
+   627→                  <div className="text-[13px] text-foreground truncate">
+   628→                    {item.name}
+   629→                  </div>
+   630→                  <div className="text-[11px] text-ws-disabled truncate">
+   631→                    {item.kind === "project" ? "project" : item.path}
+   632→                  </div>
+   633→                </div>
+   634→              </button>
+   635→            );
+   636→          })}
+   637→        </div>
+   638→      )}
+   639→
+   640→      {/* composer box */}
+   641→      <div
+   642→        className={cn(
+   643→          "relative rounded-[14px] border border-ws-border",
+   644→          "bg-card-ws p-3.5 transition-colors duration-150",
+   645→          "focus-within:border-accent-fill/50"
+   646→        )}
+   647→      >
+   648→        {/* project selector bar (top of composer) — hidden on mobile */}
+   649→        <div className="hidden min-[640px]:flex items-center gap-1.5 mb-2 ws-fade-in">
+   650→          <DropdownMenu>
+   651→            <DropdownMenuTrigger asChild>
+   652→              <button
+   653→                type="button"
+   654→                aria-label="Select project"
+   655→                className={cn(
+   656→                  "inline-flex items-center gap-1.5 h-7 px-2 rounded-[8px]",
+   657→                  "border border-ws-border-soft bg-hover text-[12px] text-foreground",
+   658→                  "hover:bg-hover focus-ring max-w-[200px]",
+   659→                  "transition-colors duration-150"
+   660→                )}
+   661→              >
+   662→                <Folder
+   663→                  className={cn(
+   664→                    "size-[13px] shrink-0",
+   665→                    projectId ? "text-accent-hi" : "text-ws-secondary"
+   666→                  )}
+   667→                />
+   668→                <span
+   669→                  className={cn(
+   670→                    "truncate hidden min-[640px]:inline",
+   671→                    !activeProject && "text-ws-secondary"
+   672→                  )}
+   673→                >
+   674→                  {activeProject ? activeProject.name : "No project"}
+   675→                </span>
+   676→                <ChevronDown
+   677→                  className={cn(
+   678→                    "size-3 shrink-0 text-ws-secondary"
+   679→                  )}
+   680→                />
+   681→              </button>
+   682→            </DropdownMenuTrigger>
+   683→            <DropdownMenuContent
+   684→              align="start"
+   685→              sideOffset={6}
+   686→              className={cn(
+   687→                "min-w-[220px] p-1 rounded-[10px]",
+   688→                "border border-ws-border bg-popover"
+   689→              )}
+   690→            >
+   691→              <DropdownMenuItem
+   692→                onSelect={() => setTabProject(tabId, undefined)}
+   693→                className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+   694→              >
+   695→                <Minus className="size-[13px] text-ws-secondary" />
+   696→                <span className="flex-1 truncate">No project</span>
+   697→                {!projectId && (
+   698→                  <Check className="size-3.5 text-accent-hi shrink-0" />
+   699→                )}
+   700→              </DropdownMenuItem>
+   701→              <div className="h-px bg-ws-border my-1" />
+   702→              {projects.map((p) => {
+   703→                const selected = p.id === projectId;
+   704→                return (
+   705→                  <DropdownMenuItem
+   706→                    key={p.id}
+   707→                    onSelect={() => setTabProject(tabId, p.id, p.name)}
+   708→                    className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+   709→                  >
+   710→                    <Folder className="size-[13px] text-accent-hi" />
+   711→                    <span className="flex-1 truncate">{p.name}</span>
+   712→                    {selected && (
+   713→                      <Check className="size-3.5 text-accent-hi shrink-0" />
+   714→                    )}
+   715→                  </DropdownMenuItem>
+   716→                );
+   717→              })}
+   718→              <div className="h-px bg-ws-border my-1" />
+   719→              <DropdownMenuItem
+   720→                onSelect={() => {
+   721→                  const id = addProject("New project");
+   722→                  setTabProject(tabId, id, "New project");
+   723→                  toast.success("Project linked");
+   724→                }}
+   725→                className={cn(
+   726→                  "text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover",
+   727→                  "text-accent-hi"
+   728→                )}
+   729→              >
+   730→                <FolderPlus className="size-[13px]" />
+   731→                <span className="flex-1 truncate">New project</span>
+   732→              </DropdownMenuItem>
+   733→            </DropdownMenuContent>
+   734→          </DropdownMenu>
+   735→        </div>
+   736→
+   737→        {/* skills chip row (above the textarea, only when skills exist) */}
+   738→        {skills.length > 0 && (
+   739→          <div className="flex flex-wrap gap-1.5 mb-2 ws-fade-in">
+   740→            {skills.map((skillId) => {
+   741→              const cmd = SLASH_COMMANDS.find((c) => c.id === skillId);
+   742→              const Icon = cmd ? skillIcon(cmd.icon) : Sparkles;
+   743→              const label = cmd ? stripSlash(cmd.label) : skillId;
+   744→              return (
+   745→                <span
+   746→                  key={skillId}
+   747→                  className={cn(
+   748→                    "inline-flex items-center gap-1 rounded-full",
+   749→                    "border border-ws-border bg-hover pl-2 pr-1 py-0.5",
+   750→                    "text-[12px] text-foreground"
+   751→                  )}
+   752→                >
+   753→                  <Icon className="size-3 text-accent-hi" />
+   754→                  {label}
+   755→                  <button
+   756→                    type="button"
+   757→                    aria-label="Remove skill"
+   758→                    onClick={() => removeSkill(tabId, skillId)}
+   759→                    className={cn(
+   760→                      "inline-flex items-center justify-center size-4 rounded-full",
+   761→                      "text-ws-secondary hover:text-foreground hover:bg-card-ws",
+   762→                      "transition-colors focus-ring"
+   763→                    )}
+   764→                  >
+   765→                    <X className="size-3" />
+   766→                  </button>
+   767→                </span>
+   768→              );
+   769→            })}
+   770→          </div>
+   771→        )}
+   772→
+   773→        {/* deep research indicator (below skills chips, above the textarea) */}
+   774→        {researchMode && !streaming && (
+   775→          <div
+   776→            className={cn(
+   777→              "flex items-center gap-1.5 rounded-[6px]",
+   778→              "bg-accent-fill/10 border border-accent-fill/20 px-2 py-1",
+   779→              "text-[12px] text-accent-hi mb-2 ws-fade-in"
+   780→            )}
+   781→          >
+   782→            <Telescope className="size-3.5 shrink-0" />
+   783→            <span className="truncate">
+   784→              Deep research mode — the agent will search, read, analyze, and write a full report.
+   785→            </span>
+   786→          </div>
+   787→        )}
+   788→
+   789→        <Textarea
+   790→          ref={taRef}
+   791→          value={draft}
+   792→          onChange={(e) => setComposerDraft(tabId, e.target.value)}
+   793→          onKeyDown={onKeyDown}
+   794→          rows={1}
+   795→          placeholder="Ask Goodstuff-Agent... Use / for commands"
+   796→          className={cn(
+   797→            "bg-transparent border-0 resize-none p-0 m-0",
+   798→            "text-[15px] leading-[1.55] text-foreground",
+   799→            "placeholder:text-ws-secondary/80",
+   800→            "focus-visible:ring-0 outline-none shadow-none",
+   801→            "max-h-[200px] min-h-[28px] ws-scroll",
+   802→            "[field-sizing:none]"
+   803→          )}
+   804→        />
+   805→
+   806→        {/* bottom row */}
+   807→        <div className="flex flex-wrap items-center justify-between gap-y-2 mt-2.5 gap-2">
+   808→          {/* left cluster: attach + Plan/Build selector + agent picker */}
+   809→          <div className="flex items-center gap-1.5">
+   810→            <DropdownMenu>
+   811→              <DropdownMenuTrigger asChild>
+   812→                <button
+   813→                  type="button"
+   814→                  aria-label="Attach"
+   815→                  className={cn(
+   816→                    "inline-flex items-center justify-center size-8",
+   817→                    "rounded-[8px] text-ws-secondary hover:bg-hover hover:text-foreground",
+   818→                    "transition-colors focus-ring"
+   819→                  )}
+   820→                >
+   821→                  <Plus className="size-4" />
+   822→                </button>
+   823→              </DropdownMenuTrigger>
+   824→              <DropdownMenuContent
+   825→                align="start"
+   826→                sideOffset={6}
+   827→                className={cn(
+   828→                  "min-w-[160px] p-1 rounded-[10px]",
+   829→                  "bg-popover border border-ws-border"
+   830→                )}
+   831→              >
+   832→                <DropdownMenuItem
+   833→                  onSelect={() => toast.info("Attachments are simulated")}
+   834→                  className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+   835→                >
+   836→                  <Paperclip className="size-4 text-ws-secondary" />
+   837→                  Attach file
+   838→                </DropdownMenuItem>
+   839→                <DropdownMenuItem
+   840→                  onSelect={() => toast.info("Attachments are simulated")}
+   841→                  className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+   842→                >
+   843→                  <Plus className="size-4 text-ws-secondary" />
+   844→                  Attach image
+   845→                </DropdownMenuItem>
+   846→              </DropdownMenuContent>
+   847→            </DropdownMenu>
+   848→
+   849→            {/* Plan / Build mode selector */}
+   850→            <div
+   851→              className={cn(
+   852→                "inline-flex items-center rounded-[8px] border border-ws-border",
+   853→                "bg-card-ws p-0.5"
+   854→              )}
+   855→              role="group"
+   856→              aria-label="Build mode"
+   857→            >
+   858→              {(["plan", "build"] as BuildMode[]).map((mode) => {
+   859→                const active = buildMode === mode;
+   860→                const ModeIcon = mode === "plan" ? Map : Hammer;
+   861→                return (
+   862→                  <button
+   863→                    key={mode}
+   864→                    type="button"
+   865→                    onClick={() => setBuildMode(mode)}
+   866→                    aria-pressed={active}
+   867→                    aria-label={mode === "plan" ? "Plan" : "Build"}
+   868→                    title={mode === "plan" ? "Plan" : "Build"}
+   869→                    className={cn(
+   870→                      "inline-flex items-center gap-1 h-7 px-2.5 max-[639px]:px-2 rounded-[6px]",
+   871→                      "text-[12px] font-medium transition-colors focus-ring",
+   872→                      active
+   873→                        ? "bg-accent-fill text-white"
+   874→                        : "text-ws-secondary hover:text-foreground"
+   875→                    )}
+   876→                  >
+   877→                    <ModeIcon className="size-3.5" />
+   878→                    <span className="hidden min-[640px]:inline">
+   879→                      {mode === "plan" ? "Plan" : "Build"}
+   880→                    </span>
+   881→                  </button>
+   882→                );
+   883→              })}
+   884→            </div>
+   885→
+   886→            {/* Deep research toggle */}
+   887→            <button
+   888→              type="button"
+   889→              onClick={() => {
+   890→                const next = !researchMode;
+   891→                setResearchMode(tabId, next);
+   892→                toast(
+   893→                  next ? "Deep research enabled" : "Deep research disabled"
+   894→                );
+   895→              }}
+   896→              aria-pressed={researchMode}
+   897→              aria-label="Deep research"
+   898→              title="Deep research"
+   899→              className={cn(
+   900→                "inline-flex items-center gap-1.5 h-8 px-2.5",
+   901→                "rounded-[8px] border text-[12px] transition-colors duration-150 focus-ring",
+   902→                researchMode
+   903→                  ? "border-accent-fill/40 bg-accent-fill/10 text-accent-hi"
+   904→                  : "border-ws-border bg-card-ws text-ws-secondary hover:text-foreground"
+   905→              )}
+   906→            >
+   907→              <Telescope className="size-3.5 shrink-0" />
+   908→              <span className="hidden min-[640px]:inline">Research</span>
+   909→            </button>
+   910→
+   911→            {/* agent picker */}
+   912→            <Popover open={agentOpen} onOpenChange={setAgentOpen}>
+   913→              <PopoverTrigger asChild>
+   914→                <button
+   915→                  type="button"
+   916→                  aria-label="Pick agent"
+   917→                  className={cn(
+   918→                    "inline-flex items-center gap-1.5 h-8 px-2.5 max-[639px]:px-2",
+   919→                    "rounded-[8px] border border-ws-border bg-card-ws",
+   920→                    "text-[12px] text-foreground hover:bg-hover",
+   921→                    "transition-colors focus-ring"
+   922→                  )}
+   923→                >
+   924→                  {React.createElement(agentIcon(activeAgent?.icon), {
+   925→                    className: "size-3.5 text-accent-hi",
+   926→                  })}
+   927→                  <span className="truncate max-w-[120px] hidden min-[640px]:inline">
+   928→                    {agentTriggerName}
+   929→                  </span>
+   930→                  <ChevronDown className="size-3 text-ws-secondary shrink-0" />
+   931→                </button>
+   932→              </PopoverTrigger>
+   933→              <PopoverContent
+   934→                align="start"
+   935→                sideOffset={6}
+   936→                className={cn(
+   937→                  "w-[280px] max-w-[calc(100vw-2rem)] p-1 rounded-[10px]",
+   938→                  "bg-popover border border-ws-border"
+   939→                )}
+   940→              >
+   941→                {/* None option (clears the agent) */}
+   942→                <button
+   943→                  type="button"
+   944→                  onClick={() => handleAgentSelect("", "None")}
+   945→                  className={cn(
+   946→                    "w-full rounded-[8px] px-2.5 py-2 flex items-start gap-2",
+   947→                    "text-left transition-colors cursor-pointer hover:bg-hover",
+   948→                    agentId === "" && "bg-hover"
+   949→                  )}
+   950→                >
+   951→                  <div className="size-7 rounded-[8px] bg-hover flex items-center justify-center shrink-0">
+   952→                    <Bot className="size-4 text-accent-hi" />
+   953→                  </div>
+   954→                  <div className="min-w-0 flex-1">
+   955→                    <div className="text-[13px] font-medium text-foreground">
+   956→                      None
+   957→                    </div>
+   958→                    <div className="text-[12px] text-ws-secondary line-clamp-1">
+   959→                      No specific agent
+   960→                    </div>
+   961→                  </div>
+   962→                  {agentId === "" && (
+   963→                    <Check className="size-3.5 text-accent-hi ml-auto shrink-0" />
+   964→                  )}
+   965→                </button>
+   966→
+   967→                <div className="text-[11px] uppercase tracking-wide text-ws-secondary px-2.5 pt-2 pb-1">
+   968→                  Detected agents
+   969→                </div>
+   970→
+   971→                {AGENTS.map((a) => {
+   972→                  const Icon = agentIcon(a.icon);
+   973→                  const selected = a.id === agentId;
+   974→                  return (
+   975→                    <div
+   976→                      key={a.id}
+   977→                      title={
+   978→                        a.detected ? undefined : "Not detected on this machine"
+   979→                      }
+   980→                      onClick={
+   981→                        a.detected
+   982→                          ? () => handleAgentSelect(a.id, a.name)
+   983→                          : undefined
+   984→                      }
+   985→                      className={cn(
+   986→                        "rounded-[8px] px-2.5 py-2 flex items-start gap-2",
+   987→                        "transition-colors",
+   988→                        a.detected
+   989→                          ? "hover:bg-hover cursor-pointer"
+   990→                          : "opacity-50",
+   991→                        selected && "bg-hover"
+   992→                      )}
+   993→                    >
+   994→                      <div className="size-7 rounded-[8px] bg-hover flex items-center justify-center shrink-0">
+   995→                        <Icon className="size-4 text-accent-hi" />
+   996→                      </div>
+   997→                      <div className="min-w-0 flex-1">
+   998→                        <div className="flex items-center gap-1.5">
+   999→                          <span className="text-[13px] font-medium text-foreground">
+  1000→                            {a.name}
+  1001→                          </span>
+  1002→                          <span className="text-[11px] text-ws-disabled">
+  1003→                            {a.vendor}
+  1004→                          </span>
+  1005→                        </div>
+  1006→                        <div className="text-[12px] text-ws-secondary line-clamp-1">
+  1007→                          {a.description}
+  1008→                        </div>
+  1009→                      </div>
+  1010→                      {selected ? (
+  1011→                        <Check className="size-3.5 text-accent-hi ml-auto shrink-0" />
+  1012→                      ) : !a.detected ? (
+  1013→                        <span className="ml-auto text-[10px] text-ws-disabled border border-ws-border rounded-full px-1.5 py-0.5 shrink-0">
+  1014→                          Not detected
+  1015→                        </span>
+  1016→                      ) : null}
+  1017→                    </div>
+  1018→                  );
+  1019→                })}
+  1020→              </PopoverContent>
+  1021→            </Popover>
+  1022→          </div>
+  1023→
+  1024→          {/* right cluster: model picker + send */}
+  1025→          <div className="flex items-center gap-1.5">
+  1026→            <ModelPicker tabId={tabId} open={modelOpen} onOpenChange={setModelOpen} />
+  1027→            <button
+  1028→              type="button"
+  1029→              onClick={onSendClick}
+  1030→              aria-label={sendLabel}
+  1031→              className={cn(
+  1032→                "inline-flex items-center justify-center size-8",
+  1033→                "rounded-[8px] bg-accent-fill text-white",
+  1034→                "hover:bg-accent-hi transition-colors focus-ring"
+  1035→              )}
+  1036→            >
+  1037→              <SendIcon className="size-4" />
+  1038→            </button>
+  1039→          </div>
+  1040→        </div>
+  1041→      </div>
+  1042→    </div>
+  1043→  );
+  1044→}
+  1045→

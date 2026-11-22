@@ -21,6 +21,8 @@ export function useTheme(): void {
   const customVars = useSettingsStore((s) => s.customVars);
   const fontFamily = useSettingsStore((s) => s.fontFamily);
   const fontSize = useSettingsStore((s) => s.fontSize);
+  const lineHeight = useSettingsStore((s) => s.lineHeight);
+  const letterSpacing = useSettingsStore((s) => s.letterSpacing);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -70,17 +72,27 @@ export function useTheme(): void {
     }
   }, [themeId, customVars]);
 
-  // apply font family + size (on <body> where the next/font CSS variables live)
+  // apply font family + size + line-height + letter-spacing
   useEffect(() => {
     const body = document.body;
     const fontMap: Record<string, string> = {
       Inter: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
       Geist: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
+      Roboto: "'Roboto', ui-sans-serif, system-ui, sans-serif",
+      "Open Sans": "'Open Sans', ui-sans-serif, system-ui, sans-serif",
+      Poppins: "'Poppins', ui-sans-serif, system-ui, sans-serif",
+      "Space Grotesk": "'Space Grotesk', ui-sans-serif, system-ui, sans-serif",
+      Lora: "'Lora', ui-serif, Georgia, serif",
+      "Playfair Display": "'Playfair Display', ui-serif, Georgia, serif",
+      "JetBrains Mono": "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace",
+      "Fira Code": "'Fira Code', ui-monospace, SFMono-Regular, monospace",
       Monospace: "var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace",
       Serif: "ui-serif, Georgia, Cambria, serif",
       System: "ui-sans-serif, system-ui, -apple-system, sans-serif",
     };
     body.style.fontFamily = fontMap[fontFamily] || fontMap.Inter;
     body.style.fontSize = `${fontSize}px`;
-  }, [fontFamily, fontSize]);
+    body.style.lineHeight = lineHeight;
+    body.style.letterSpacing = letterSpacing;
+  }, [fontFamily, fontSize, lineHeight, letterSpacing]);
 }

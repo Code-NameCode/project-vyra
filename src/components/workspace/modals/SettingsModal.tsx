@@ -416,8 +416,12 @@ function AppearanceTabContent() {
   const resetTheme = useSettingsStore((s) => s.resetTheme);
   const fontFamily = useSettingsStore((s) => s.fontFamily);
   const fontSize = useSettingsStore((s) => s.fontSize);
+  const lineHeight = useSettingsStore((s) => s.lineHeight);
+  const letterSpacing = useSettingsStore((s) => s.letterSpacing);
   const setFontFamily = useSettingsStore((s) => s.setFontFamily);
   const setFontSize = useSettingsStore((s) => s.setFontSize);
+  const setLineHeight = useSettingsStore((s) => s.setLineHeight);
+  const setLetterSpacing = useSettingsStore((s) => s.setLetterSpacing);
 
   const hasCustom = Object.keys(customVars).length > 0;
   const activePreset = getPresetTheme(themeId);
@@ -544,10 +548,18 @@ function AppearanceTabContent() {
               <SelectTrigger className="focus-ring bg-card-ws border-ws-border text-[13px] h-8 w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-popover border border-ws-border">
+              <SelectContent className="bg-popover border border-ws-border max-h-[280px]">
                 <SelectItem value="Inter">Inter / Geist (sans)</SelectItem>
-                <SelectItem value="Monospace">Monospace</SelectItem>
-                <SelectItem value="Serif">Serif</SelectItem>
+                <SelectItem value="Roboto">Roboto</SelectItem>
+                <SelectItem value="Open Sans">Open Sans</SelectItem>
+                <SelectItem value="Poppins">Poppins</SelectItem>
+                <SelectItem value="Space Grotesk">Space Grotesk</SelectItem>
+                <SelectItem value="Lora">Lora (serif)</SelectItem>
+                <SelectItem value="Playfair Display">Playfair Display (serif)</SelectItem>
+                <SelectItem value="JetBrains Mono">JetBrains Mono</SelectItem>
+                <SelectItem value="Fira Code">Fira Code</SelectItem>
+                <SelectItem value="Monospace">System Monospace</SelectItem>
+                <SelectItem value="Serif">System Serif</SelectItem>
                 <SelectItem value="System">System UI</SelectItem>
               </SelectContent>
             </Select>
@@ -559,10 +571,41 @@ function AppearanceTabContent() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-popover border border-ws-border">
-                <SelectItem value="13">Small (13px)</SelectItem>
-                <SelectItem value="14">Medium (14px)</SelectItem>
-                <SelectItem value="15">Large (15px)</SelectItem>
-                <SelectItem value="16">Extra large (16px)</SelectItem>
+                <SelectItem value="12">12px</SelectItem>
+                <SelectItem value="13">13px</SelectItem>
+                <SelectItem value="14">14px</SelectItem>
+                <SelectItem value="15">15px</SelectItem>
+                <SelectItem value="16">16px</SelectItem>
+                <SelectItem value="17">17px</SelectItem>
+                <SelectItem value="18">18px</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1 min-w-[100px]">
+            <label className="text-[11px] text-ws-secondary">Line height</label>
+            <Select value={lineHeight} onValueChange={setLineHeight}>
+              <SelectTrigger className="focus-ring bg-card-ws border-ws-border text-[13px] h-8 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-ws-border">
+                <SelectItem value="1.4">Compact (1.4)</SelectItem>
+                <SelectItem value="1.5">Normal (1.5)</SelectItem>
+                <SelectItem value="1.625">Relaxed (1.625)</SelectItem>
+                <SelectItem value="1.8">Loose (1.8)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1 min-w-[100px]">
+            <label className="text-[11px] text-ws-secondary">Letter spacing</label>
+            <Select value={letterSpacing} onValueChange={setLetterSpacing}>
+              <SelectTrigger className="focus-ring bg-card-ws border-ws-border text-[13px] h-8 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-ws-border">
+                <SelectItem value="-0.02em">Tight (-0.02em)</SelectItem>
+                <SelectItem value="0">Normal (0)</SelectItem>
+                <SelectItem value="0.02em">Wide (0.02em)</SelectItem>
+                <SelectItem value="0.05em">Extra wide (0.05em)</SelectItem>
               </SelectContent>
             </Select>
           </div>

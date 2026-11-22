@@ -781,7 +781,7 @@ export function Composer({ tabId }: { tabId: string }) {
         />
 
         {/* bottom row */}
-        <div className="flex items-center justify-between mt-2.5 gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-y-2 mt-2.5 gap-2">
           {/* left cluster: attach + Plan/Build selector + agent picker */}
           <div className="flex items-center gap-1.5">
             <DropdownMenu>

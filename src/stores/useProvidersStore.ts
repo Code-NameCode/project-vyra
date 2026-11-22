@@ -15,7 +15,7 @@ interface ProvidersState {
   removeProvider: (id: string) => void;
   setProviderModels: (id: string, models: ProviderModel[]) => void;
   toggleModelHidden: (providerId: string, modelId: string) => void;
-  detectProviderModels: (providerId: string) => Promise<ProviderModel[]>;
+  detectProviderModels: (providerId: string, hideAll?: boolean) => Promise<ProviderModel[]>;
   detectOllama: (baseUrl?: string) => Promise<ProviderModel[]>;
 }
 
@@ -173,7 +173,7 @@ export const useProvidersStore = create<ProvidersState>()(
           ),
         })),
 
-      detectProviderModels: async (providerId) => {
+      detectProviderModels: async (providerId, hideAll = false) => {
         const provider = get().providers.find((p) => p.id === providerId);
         if (!provider) return [];
         set({ detecting: true });
@@ -190,13 +190,15 @@ export const useProvidersStore = create<ProvidersState>()(
             error: string | null;
           };
           const prev = provider.models;
-          // preserve hidden flags for models that already existed
+          // New models start hidden so the user curates which to show. Existing
+          // models keep their hidden flag (so a refresh preserves your choices).
+          // `hideAll` (used on connect) hides every fetched model.
           const models: ProviderModel[] = data.models.map((name) => {
             const existing = prev.find((pm) => pm.name === name);
             return {
               name,
               id: modelIdFor(providerId, name),
-              hidden: existing?.hidden,
+              hidden: hideAll ? true : existing ? existing.hidden : true,
             };
           });
           get().setProviderModels(providerId, models);

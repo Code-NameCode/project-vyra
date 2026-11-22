@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Loader2, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { useChatStore } from "@/stores/useChatStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useProvidersStore } from "@/stores/useProvidersStore";
@@ -73,6 +74,46 @@ export function ModelPicker({
     }
     return enriched;
   }, [providers]);
+
+  const [query, setQuery] = React.useState("");
+  const searchRef = React.useRef<HTMLInputElement>(null);
+
+  // Reset the search query whenever the popover closes.
+  React.useEffect(() => {
+    if (!open) setQuery("");
+  }, [open]);
+
+  // Filter groups by the typed query (case-insensitive). A model matches if
+  // its name OR its provider name includes the query. Groups with zero
+  // matching models are dropped, except the synthetic empty Ollama group,
+  // which is kept only when the query matches "ollama".
+  const filteredGroups = React.useMemo<EnrichedGroup[]>(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return groups;
+    const out: EnrichedGroup[] = [];
+    for (const g of groups) {
+      const isOllamaEmpty = g.type === "ollama" && g.models.length === 0;
+      if (isOllamaEmpty) {
+        const labelLc = g.label.toLowerCase();
+        const typeLc = (g.type ?? "").toLowerCase();
+        if (labelLc.includes("ollama") || typeLc.includes("ollama")) {
+          out.push(g);
+        }
+        continue;
+      }
+      const matched = g.models.filter((m) => {
+        const nameLc = m.name.toLowerCase();
+        const provLc = (m.providerName ?? g.label ?? "").toLowerCase();
+        return nameLc.includes(q) || provLc.includes(q);
+      });
+      if (matched.length > 0) {
+        out.push({ ...g, models: matched });
+      }
+    }
+    return out;
+  }, [groups, query]);
+
+  const noMatches = query.trim() !== "" && filteredGroups.length === 0;
 
   const handleSelect = (id: string) => {
     setModel(tabId, id);
@@ -136,18 +177,40 @@ export function ModelPicker({
       <PopoverContent
         align="end"
         sideOffset={6}
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          searchRef.current?.focus();
+        }}
         className={cn(
           "w-[300px] p-1 rounded-[10px]",
           "bg-popover border border-ws-border"
         )}
       >
-        <div className="ws-scroll max-h-[340px] overflow-y-auto">
-          {empty && !detecting && (
+        <div className="p-1.5 sticky top-0 bg-popover z-10">
+          <div className="relative">
+            <Search className="size-3.5 text-ws-secondary absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search models…"
+              className="bg-card-ws border border-ws-border h-8 text-[13px] pl-7 rounded-[8px] focus-ring"
+            />
+          </div>
+        </div>
+        <div className="ws-scroll max-h-[300px] overflow-y-auto">
+          {noMatches ? (
             <div className="text-[12px] text-ws-disabled px-2.5 py-3">
-              No models yet — connect a provider in Settings and fetch models.
+              No models found
             </div>
-          )}
-          {groups.map((group) => {
+          ) : (
+            <>
+              {empty && !detecting && (
+                <div className="text-[12px] text-ws-disabled px-2.5 py-3">
+                  No models yet — connect a provider in Settings and fetch models.
+                </div>
+              )}
+              {filteredGroups.map((group) => {
             const isOllama = group.type === "ollama";
             const showEmpty =
               group.models.length === 0 && !detecting;
@@ -181,6 +244,8 @@ export function ModelPicker({
               </div>
             );
           })}
+            </>
+          )}
         </div>
       </PopoverContent>
     </Popover>

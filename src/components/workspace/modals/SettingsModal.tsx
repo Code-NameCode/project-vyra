@@ -169,6 +169,14 @@ function ProviderCard({
               onChange={(e) =>
                 updateProvider(provider.id, { apiKey: e.target.value })
               }
+              onBlur={() => {
+                if (provider.apiKey.trim()) {
+                  void detectProviderModels(provider.id, true);
+                  toast(
+                    "Fetching models — all hidden until you select them"
+                  );
+                }
+              }}
               placeholder="sk-..."
               className="h-8 bg-card-ws border-ws-border-soft text-[13px] focus-ring"
             />
@@ -232,6 +240,10 @@ function ModelsTabContent() {
           Fetch models from connected providers and choose which to show in the
           composer.
         </span>
+        <p className="text-[12px] text-ws-secondary mt-1">
+          Connected providers auto-fetch models hidden by default — toggle the
+          eye to show a model in the composer.
+        </p>
       </div>
 
       <div className="ws-scroll max-h-[400px] overflow-y-auto flex flex-col gap-2 mt-3">

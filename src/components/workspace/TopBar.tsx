@@ -20,7 +20,7 @@ export function TopBar() {
   const newChatTab = useAppStore((s) => s.newChatTab);
 
   return (
-    <header className="flex h-14 items-center gap-3 bg-page px-2.5">
+    <header className="flex h-14 shrink-0 items-center gap-3 bg-page px-2.5">
       {/* Segmented Code | Chat toggle pill */}
       <div
         role="group"

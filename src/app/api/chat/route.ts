@@ -9,12 +9,14 @@ interface InMessage {
 
 interface ChatRequestBody {
   mode?: "code" | "chat";
+  buildMode?: "plan" | "build";
   model?: string;
   messages: InMessage[];
   apiKey?: string;
   baseUrl?: string;
   useRealApi?: boolean;
   agentInstructions?: string;
+  projectRules?: string;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -72,9 +74,20 @@ export async function POST(req: NextRequest) {
           model: body.model ?? "gpt-4o-mini",
           stream: true,
           messages: [
-            ...(body.agentInstructions
-              ? [{ role: "system" as const, content: body.agentInstructions }]
-              : []),
+            ...([
+              body.agentInstructions,
+              body.projectRules
+                ? `# Project rules\n${body.projectRules}`
+                : undefined,
+              body.buildMode === "plan"
+                ? "You are in PLAN mode: propose a clear, step-by-step plan. Do NOT edit files or run commands. Outline the approach, the files you'd touch, and the order of work."
+                : undefined,
+            ]
+              .filter(Boolean)
+              .map((content) => ({
+                role: "system" as const,
+                content: content as string,
+              }))),
             ...messages,
           ],
         }),
@@ -148,10 +161,15 @@ export async function POST(req: NextRequest) {
   }
 
   // ---------- Simulated agent path ----------
+  const buildMode = body.buildMode ?? "build";
   const topic = deriveTopic(messages);
   const title = titleCase(topic);
   const finalAnswer =
-    mode === "code" ? buildCodeAnswer(title) : buildChatAnswer(topic);
+    buildMode === "plan"
+      ? buildPlanAnswer(topic, title)
+      : mode === "code"
+      ? buildCodeAnswer(title)
+      : buildChatAnswer(topic);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -165,7 +183,18 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        if (mode === "code") {
+        if (buildMode === "plan") {
+          // Plan mode: reason and propose a plan without executing changes.
+          const s1 = "step_plan";
+          send({ type: "step_start", id: s1, title: "Planning", kind: "plan" });
+          await sleep(1100 + Math.random() * 700, signal);
+          send({ type: "step_done", id: s1, durationMs: 1400 });
+
+          const s2 = "step_review";
+          send({ type: "step_start", id: s2, title: "Reviewing approach", kind: "review" });
+          await sleep(700 + Math.random() * 400, signal);
+          send({ type: "step_done", id: s2, durationMs: 900 });
+        } else if (mode === "code") {
           const s1 = "step_files";
           send({ type: "step_start", id: s1, title: "Finding files", kind: "search" });
           await sleep(700 + Math.random() * 500, signal);
@@ -303,6 +332,35 @@ Let me think through this step by step:
 - Finally, I'd verify the result against your original request.
 
 If you'd like, I can switch to **Code mode** and actually build it out \u2014 just toggle the pill in the top bar. Otherwise, I'm happy to keep brainstorming here.`;
+}
+
+function buildPlanAnswer(topic: string, title: string): string {
+  return `Here's a plan for **${title}**. I haven't changed anything yet \u2014 switch to **Build** when you're ready to execute.
+
+## Goal
+${title} \u2014 built from your request: "${topic}".
+
+## Proposed approach
+1. Scaffold the project structure and base layout.
+2. Implement the core component(s) and data flow.
+3. Wire up styling and responsive behavior.
+4. Add basic tests for the key paths.
+5. Run the test suite and review the diff.
+
+## Files I'd touch
+- \`src/App.tsx\` \u2014 main component scaffold
+- \`src/App.css\` \u2014 base styles
+- A few supporting components/modules as needed
+
+## Open questions
+- Should this be a single page or multi-route?
+- Any specific styling system or design tokens to follow?
+
+## Risks / notes
+- Keep edits small and reviewable.
+- Verify nothing breaks existing tests.
+
+Switch the composer to **Build** and send again to execute this plan.`;
 }
 
 function buildAppFile(title: string): string {

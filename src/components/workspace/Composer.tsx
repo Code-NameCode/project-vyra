@@ -3,11 +3,28 @@
 import * as React from "react";
 import {
   ArrowUp,
+  BookOpen,
+  Brain,
+  CircleHelp,
+  Cpu,
+  Eraser,
+  File,
+  FileText,
+  FlaskConical,
+  Folder,
+  Hammer,
+  Map,
   Mic,
   Paperclip,
   Plus,
+  Rocket,
+  ScanSearch,
+  Shuffle,
+  Sparkles,
   Square,
+  Wrench,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -19,9 +36,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useChatStore } from "@/stores/useChatStore";
+import { useAppStore } from "@/stores/useAppStore";
+import { useProjectsStore } from "@/stores/useProjectsStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { SLASH_COMMANDS } from "@/data/slashCommands";
-import type { SlashCommand } from "@/lib/types";
+import type {
+  Conversation,
+  FileNode,
+  SlashCommand,
+} from "@/lib/types";
 import { ModelPicker } from "./ModelPicker";
 
 /* ---- minimal Web Speech API typing (no `any`) ---- */
@@ -50,10 +73,51 @@ type WindowWithSpeech = Window & {
   webkitSpeechRecognition?: SpeechRecognitionCtor;
 };
 
+/* ---- Plan / Build mode ---- */
+type BuildMode = "plan" | "build";
+// Other modules may extend Conversation/ChatState with buildMode. Access
+// defensively so the Composer keeps working whether or not the store has
+// been augmented yet.
+type ConvWithBuild = Conversation & { buildMode?: BuildMode };
+interface ChatStoreWithBuild {
+  setBuildMode?: (tabId: string, mode: BuildMode) => void;
+}
+
+/* ---- skill icon map for slash commands ---- */
+const SKILL_ICON: Record<string, LucideIcon> = {
+  brain: Brain,
+  hammer: Hammer,
+  scan: ScanSearch,
+  flask: FlaskConical,
+  wrench: Wrench,
+  book: BookOpen,
+  shuffle: Shuffle,
+  doc: FileText,
+  rocket: Rocket,
+  eraser: Eraser,
+  cpu: Cpu,
+  help: CircleHelp,
+};
+function skillIcon(key?: string): LucideIcon {
+  if (key && SKILL_ICON[key]) return SKILL_ICON[key];
+  return Sparkles;
+}
+
+/* ---- @ context reference item ---- */
+type SlashCommandWithIcon = SlashCommand & { icon?: string };
+interface RefItem {
+  kind: "file" | "project";
+  name: string;
+  path: string;
+  icon: LucideIcon;
+}
+const EMPTY_FILES: FileNode[] = [];
+
 /**
  * Composer — the core prompt input.
- * Auto-growing textarea, slash command popup, attach menu, model picker chip,
- * and a send/stop/voice button.
+ * Auto-growing textarea, slash command popup (with skill icons), Codex-style
+ * `@` context referencing, attach menu, Plan/Build mode selector, model
+ * picker chip, and a send/stop/voice button.
  */
 export function Composer({ tabId }: { tabId: string }) {
   const ensure = useChatStore((s) => s.ensure);
@@ -68,12 +132,71 @@ export function Composer({ tabId }: { tabId: string }) {
   const stopStreaming = useChatStore((s) => s.stopStreaming);
   const clearConversation = useChatStore((s) => s.clearConversation);
 
+  /* ---- Plan / Build mode (defensive: works with or without store support) ---- */
+  const storeBuildMode = useChatStore(
+    (s) =>
+      (s.conversations[tabId] as ConvWithBuild | undefined)?.buildMode ??
+      ("build" as BuildMode)
+  );
+  const storeSetBuildMode = useChatStore(
+    (s) => (s as unknown as ChatStoreWithBuild).setBuildMode
+  );
+  const [localBuildMode, setLocalBuildMode] =
+    React.useState<BuildMode>("build");
+  const buildMode: BuildMode = storeSetBuildMode
+    ? (storeBuildMode as BuildMode)
+    : localBuildMode;
+  const setBuildMode = React.useCallback(
+    (mode: BuildMode) => {
+      if (storeSetBuildMode) storeSetBuildMode(tabId, mode);
+      else setLocalBuildMode(mode);
+    },
+    [storeSetBuildMode, tabId]
+  );
+
+  /* ---- active workspace (reactive) for `@` referencing ---- */
+  const projectId = useAppStore(
+    (s) => s.tabs.find((t) => t.id === tabId)?.projectId
+  );
+  const projects = useProjectsStore((s) => s.projects);
+  const convFiles = useChatStore(
+    (s) => s.conversations[tabId]?.workspace.files
+  );
+
+  const files = React.useMemo<FileNode[]>(() => {
+    if (projectId) {
+      return (
+        projects.find((p) => p.id === projectId)?.workspace.files ??
+        EMPTY_FILES
+      );
+    }
+    return convFiles ?? EMPTY_FILES;
+  }, [projectId, projects, convFiles]);
+
+  const refItems = React.useMemo<RefItem[]>(() => {
+    const fileItems: RefItem[] = files.map((f) => ({
+      kind: "file",
+      name: f.name,
+      path: f.path,
+      icon: File,
+    }));
+    const projItems: RefItem[] = projects.map((p) => ({
+      kind: "project",
+      name: p.name,
+      path: p.name,
+      icon: Folder,
+    }));
+    return [...fileItems, ...projItems];
+  }, [files, projects]);
+
   const modelId = convModelId ?? defaultModelId;
 
   const taRef = React.useRef<HTMLTextAreaElement>(null);
   const [modelOpen, setModelOpen] = React.useState(false);
   const [slashSuppressed, setSlashSuppressed] = React.useState(false);
   const [selIndex, setSelIndex] = React.useState(0);
+  const [atSuppressed, setAtSuppressed] = React.useState(false);
+  const [atIndex, setAtIndex] = React.useState(0);
 
   // ensure a conversation object exists so modelId/draft are stable
   React.useEffect(() => {
@@ -88,13 +211,19 @@ export function Composer({ tabId }: { tabId: string }) {
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [draft]);
 
-  // reset slash suppression + selection whenever draft changes
+  // reset slash + @ suppression + selection whenever draft changes
   React.useEffect(() => {
     setSlashSuppressed(false);
     setSelIndex(0);
+    setAtSuppressed(false);
+    setAtIndex(0);
   }, [draft]);
 
   /* ---- slash command popup derivation ---- */
+  const slashWithIcons = React.useMemo<SlashCommandWithIcon[]>(
+    () => SLASH_COMMANDS as SlashCommandWithIcon[],
+    []
+  );
   const isSlashDraft =
     draft.startsWith("/") &&
     !draft.slice(1).includes(" ") &&
@@ -102,15 +231,53 @@ export function Composer({ tabId }: { tabId: string }) {
   const filtered = React.useMemo<SlashCommand[]>(() => {
     if (!isSlashDraft) return [];
     const q = draft.slice(1).toLowerCase();
-    if (!q) return SLASH_COMMANDS;
-    return SLASH_COMMANDS.filter(
+    if (!q) return slashWithIcons;
+    return slashWithIcons.filter(
       (c) =>
         c.label.toLowerCase().includes(q) ||
         c.id.toLowerCase().includes(q) ||
         c.hint.toLowerCase().includes(q)
     );
-  }, [isSlashDraft, draft]);
+  }, [isSlashDraft, draft, slashWithIcons]);
   const slashVisible = isSlashDraft && !slashSuppressed && filtered.length > 0;
+
+  /* ---- @ context reference popup derivation ---- */
+  const atQuery = React.useMemo<{ index: number; query: string } | null>(() => {
+    const lastAt = draft.lastIndexOf("@");
+    if (lastAt === -1) return null;
+    const after = draft.slice(lastAt + 1);
+    // the query is the text from the last "@" to the end of the draft;
+    // any whitespace terminates it.
+    if (/\s/.test(after)) return null;
+    return { index: lastAt, query: after };
+  }, [draft]);
+
+  const atFiltered = React.useMemo<RefItem[]>(() => {
+    if (!atQuery) return [];
+    const q = atQuery.query.toLowerCase();
+    const list = q
+      ? refItems.filter(
+          (it) =>
+            it.name.toLowerCase().includes(q) ||
+            it.path.toLowerCase().includes(q)
+        )
+      : refItems;
+    return list.slice(0, 12);
+  }, [atQuery, refItems]);
+
+  const atVisible =
+    !streaming &&
+    !slashVisible &&
+    atQuery !== null &&
+    !atSuppressed &&
+    atFiltered.length > 0;
+
+  // keep atIndex within bounds when the filtered list shrinks
+  React.useEffect(() => {
+    if (atFiltered.length > 0 && atIndex >= atFiltered.length) {
+      setAtIndex(0);
+    }
+  }, [atFiltered, atIndex]);
 
   /* ---- actions ---- */
   const handleSend = React.useCallback(() => {
@@ -148,6 +315,17 @@ export function Composer({ tabId }: { tabId: string }) {
     [tabId, setComposerDraft, clearConversation]
   );
 
+  const selectRef = React.useCallback(
+    (item: RefItem) => {
+      if (!atQuery) return;
+      const before = draft.slice(0, atQuery.index);
+      const next = `${before}@${item.name} `;
+      setComposerDraft(tabId, next);
+      requestAnimationFrame(() => taRef.current?.focus());
+    },
+    [atQuery, draft, setComposerDraft, tabId]
+  );
+
   /* ---- keyboard ---- */
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (slashVisible) {
@@ -176,6 +354,29 @@ export function Composer({ tabId }: { tabId: string }) {
         e.preventDefault();
         const cmd = filtered[selIndex] ?? filtered[0];
         if (cmd) selectCommand(cmd);
+        return;
+      }
+    }
+    if (atVisible) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setAtIndex((i) => (i + 1) % atFiltered.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setAtIndex((i) => (i - 1 + atFiltered.length) % atFiltered.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const item = atFiltered[atIndex] ?? atFiltered[0];
+        if (item) selectRef(item);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setAtSuppressed(true);
         return;
       }
     }
@@ -250,28 +451,78 @@ export function Composer({ tabId }: { tabId: string }) {
           )}
           role="listbox"
         >
-          {filtered.map((c, i) => (
-            <button
-              type="button"
-              key={c.id}
-              onMouseEnter={() => setSelIndex(i)}
-              onClick={() => selectCommand(c)}
-              className={cn(
-                "w-full text-left rounded-[8px] px-2.5 py-2 cursor-pointer",
-                "transition-colors",
-                i === selIndex ? "bg-hover" : "hover:bg-hover"
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-foreground">
-                  {c.label}
-                </span>
-              </div>
-              <div className="text-[12px] text-ws-secondary line-clamp-1">
-                {c.description}
-              </div>
-            </button>
-          ))}
+          {filtered.map((c, i) => {
+            const Icon = skillIcon(
+              (c as SlashCommandWithIcon).icon
+            );
+            return (
+              <button
+                type="button"
+                key={c.id}
+                onMouseEnter={() => setSelIndex(i)}
+                onClick={() => selectCommand(c)}
+                className={cn(
+                  "w-full flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 cursor-pointer",
+                  "transition-colors text-left",
+                  i === selIndex ? "bg-hover" : "hover:bg-hover"
+                )}
+              >
+                <Icon
+                  className={cn(
+                    "size-4 shrink-0",
+                    i === selIndex ? "text-accent-hi" : "text-ws-secondary"
+                  )}
+                />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium text-foreground">
+                    {c.label}
+                  </div>
+                  <div className="text-[12px] text-ws-secondary line-clamp-1">
+                    {c.description}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* `@` context reference popup (above the box) */}
+      {atVisible && (
+        <div
+          className={cn(
+            "absolute bottom-full mb-2 left-0 w-[320px] z-30",
+            "rounded-[12px] border border-ws-border bg-popover p-1.5 ws-fade-in",
+            "shadow-2xl max-h-[280px] overflow-y-auto ws-scroll"
+          )}
+          role="listbox"
+        >
+          {atFiltered.map((item, i) => {
+            const ItemIcon = item.icon;
+            return (
+              <button
+                type="button"
+                key={`${item.kind}-${item.path}`}
+                onMouseEnter={() => setAtIndex(i)}
+                onClick={() => selectRef(item)}
+                className={cn(
+                  "w-full flex items-center gap-2 rounded-[8px] px-2.5 py-2",
+                  "text-left cursor-pointer transition-colors",
+                  i === atIndex ? "bg-hover" : "hover:bg-hover"
+                )}
+              >
+                <ItemIcon className="size-3.5 shrink-0 text-ws-secondary" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] text-foreground truncate">
+                    {item.name}
+                  </div>
+                  <div className="text-[11px] text-ws-disabled truncate">
+                    {item.kind === "project" ? "project" : item.path}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -301,49 +552,84 @@ export function Composer({ tabId }: { tabId: string }) {
         />
 
         {/* bottom row */}
-        <div className="flex items-center justify-between mt-2.5 gap-2">
-          {/* left: attach */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Attach"
+        <div className="flex items-center mt-2.5 gap-2">
+          {/* left cluster: attach + Plan/Build selector */}
+          <div className="flex items-center gap-1.5">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Attach"
+                  className={cn(
+                    "inline-flex items-center justify-center size-8",
+                    "rounded-[8px] text-ws-secondary hover:bg-hover hover:text-foreground",
+                    "transition-colors focus-ring"
+                  )}
+                >
+                  <Plus className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                sideOffset={6}
                 className={cn(
-                  "inline-flex items-center justify-center size-8",
-                  "rounded-[8px] text-ws-secondary hover:bg-hover hover:text-foreground",
-                  "transition-colors focus-ring"
+                  "min-w-[160px] p-1 rounded-[10px]",
+                  "bg-popover border border-ws-border"
                 )}
               >
-                <Plus className="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              sideOffset={6}
-              className={cn(
-                "min-w-[160px] p-1 rounded-[10px]",
-                "bg-popover border border-ws-border"
-              )}
-            >
-              <DropdownMenuItem
-                onSelect={() => toast.info("Attachments are simulated")}
-                className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
-              >
-                <Paperclip className="size-4 text-ws-secondary" />
-                Attach file
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => toast.info("Attachments are simulated")}
-                className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
-              >
-                <Plus className="size-4 text-ws-secondary" />
-                Attach image
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem
+                  onSelect={() => toast.info("Attachments are simulated")}
+                  className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+                >
+                  <Paperclip className="size-4 text-ws-secondary" />
+                  Attach file
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => toast.info("Attachments are simulated")}
+                  className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+                >
+                  <Plus className="size-4 text-ws-secondary" />
+                  Attach image
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          {/* right: model picker + send */}
-          <div className="flex items-center gap-1.5">
+            {/* Plan / Build mode selector */}
+            <div
+              className={cn(
+                "inline-flex items-center rounded-[8px] border border-ws-border",
+                "bg-card-ws p-0.5"
+              )}
+              role="group"
+              aria-label="Build mode"
+            >
+              {(["plan", "build"] as BuildMode[]).map((mode) => {
+                const active = buildMode === mode;
+                const ModeIcon = mode === "plan" ? Map : Hammer;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setBuildMode(mode)}
+                    aria-pressed={active}
+                    className={cn(
+                      "inline-flex items-center gap-1 h-7 px-2.5 rounded-[6px]",
+                      "text-[12px] font-medium transition-colors focus-ring",
+                      active
+                        ? "bg-accent-fill text-white"
+                        : "text-ws-secondary hover:text-foreground"
+                    )}
+                  >
+                    <ModeIcon className="size-3.5" />
+                    {mode === "plan" ? "Plan" : "Build"}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* right cluster: model picker + send */}
+          <div className="ml-auto flex items-center gap-1.5">
             <ModelPicker tabId={tabId} open={modelOpen} onOpenChange={setModelOpen} />
             <button
               type="button"

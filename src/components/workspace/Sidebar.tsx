@@ -34,6 +34,7 @@ export function Sidebar() {
   const setSearchOpen = useAppStore((s) => s.setSearchOpen);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const openProject = useAppStore((s) => s.openProject);
+  const setRailPage = useAppStore((s) => s.setRailPage);
 
   const dailyHoursMs = useAccountStore((s) => s.dailyHoursMs);
 
@@ -87,9 +88,24 @@ export function Sidebar() {
       </div>
 
       {/* Projects section */}
-      <h2 className="mt-4 mb-1 px-2 text-[12px] uppercase tracking-wide text-ws-secondary">
-        Projects
-      </h2>
+      <div className="mt-4 mb-1 flex items-center justify-between px-2">
+        <button
+          type="button"
+          onClick={() => setRailPage("projects")}
+          className="focus-ring -mx-1 rounded-[4px] px-1 text-[12px] uppercase tracking-wide text-ws-secondary transition-colors hover:text-foreground"
+        >
+          Projects
+        </button>
+        {projects.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setRailPage("projects")}
+            className="focus-ring -mx-1 rounded-[4px] px-1 text-[11px] text-ws-disabled transition-colors hover:text-foreground"
+          >
+            Manage
+          </button>
+        )}
+      </div>
 
       <div className="ws-scroll -mx-1 flex max-h-[min(40vh,280px)] flex-col gap-0.5 overflow-y-auto px-1">
         {projects.length === 0 ? (

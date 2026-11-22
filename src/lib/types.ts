@@ -7,6 +7,7 @@ export type RailPage =
   | "sessions"
   | "templates"
   | "extensions"
+  | "projects"
   | "settings";
 
 export type TabType = "chat" | "project";
@@ -90,6 +91,8 @@ export interface Workspace {
   browserUrl: string;
 }
 
+export type BuildMode = "plan" | "build";
+
 export interface Conversation {
   tabId: string;
   title: string;
@@ -101,6 +104,7 @@ export interface Conversation {
   workspace: Workspace;
   started: boolean;
   updatedAt: number;
+  buildMode: BuildMode;
 }
 
 export interface Project {
@@ -109,6 +113,7 @@ export interface Project {
   templateId?: string;
   createdAt: number;
   workspace: Workspace;
+  rules: string;
 }
 
 export interface LegacyChat {
@@ -141,6 +146,7 @@ export interface SlashCommand {
   label: string;
   description: string;
   hint: string;
+  icon?: string;
 }
 
 // SSE event payloads emitted by /api/chat

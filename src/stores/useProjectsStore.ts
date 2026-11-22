@@ -22,6 +22,7 @@ interface ProjectsState {
   updateWorkspace: (projectId: string, updater: (ws: Workspace) => Workspace) => void;
   removeProject: (id: string) => void;
   renameProject: (id: string, name: string) => void;
+  setRules: (projectId: string, rules: string) => void;
   addLegacy: (title: string) => void;
 }
 
@@ -52,6 +53,7 @@ export const useProjectsStore = create<ProjectsState>()(
               templateId,
               createdAt: Date.now(),
               workspace: emptyWorkspace(),
+              rules: "",
             },
           ],
         }));
@@ -71,6 +73,12 @@ export const useProjectsStore = create<ProjectsState>()(
         set((s) => ({
           projects: s.projects.map((p) => (p.id === id ? { ...p, name } : p)),
         })),
+      setRules: (projectId, rules) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId ? { ...p, rules } : p
+          ),
+        })),
       addLegacy: (title) =>
         set((s) => ({
           legacy: [
@@ -81,13 +89,15 @@ export const useProjectsStore = create<ProjectsState>()(
     }),
     {
       name: "forge-projects",
-      // backfill a workspace for any persisted project missing one
+      // backfill a workspace + rules for any persisted project missing them
       merge: (persisted, current) => {
         const p = persisted as Partial<ProjectsState> | undefined;
         if (!p || !Array.isArray(p.projects)) return current as ProjectsState;
-        const projects = p.projects.map((proj) =>
-          proj.workspace ? proj : { ...proj, workspace: emptyWorkspace() }
-        );
+        const projects = p.projects.map((proj) => ({
+          ...proj,
+          workspace: proj.workspace ?? emptyWorkspace(),
+          rules: proj.rules ?? "",
+        }));
         return {
           ...current,
           ...p,

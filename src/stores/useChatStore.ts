@@ -6,6 +6,7 @@ import { uid } from "@/lib/id";
 import { readSSE } from "@/lib/streaming";
 import type {
   AgentStep,
+  BuildMode,
   ChatMessage,
   Conversation,
   StreamEvent,
@@ -46,6 +47,7 @@ function emptyConversation(tabId: string, modelId: string): Conversation {
     workspace: emptyWorkspace(),
     started: false,
     updatedAt: Date.now(),
+    buildMode: "build",
   };
 }
 
@@ -60,6 +62,7 @@ interface ChatState {
   getConversation: (tabId: string) => Conversation | undefined;
   setComposerDraft: (tabId: string, text: string) => void;
   setModel: (tabId: string, modelId: string) => void;
+  setBuildMode: (tabId: string, mode: BuildMode) => void;
   clearConversation: (tabId: string) => void;
   startFromTemplate: (prompt: string, title: string, templateId: string) => void;
   sendMessage: (tabId: string, text: string, modelId: string) => Promise<void>;
@@ -104,6 +107,18 @@ export const useChatStore = create<ChatState>()(
         conversations: {
           ...s.conversations,
           [tabId]: { ...conv, modelId },
+        },
+      };
+    }),
+
+  setBuildMode: (tabId, mode) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: { ...conv, buildMode: mode },
         },
       };
     }),
@@ -250,6 +265,12 @@ export const useChatStore = create<ChatState>()(
       }
     };
 
+    // gather project rules + build mode for the request
+    const projectRules = projectId
+      ? useProjectsStore.getState().projects.find((p) => p.id === projectId)?.rules ?? ""
+      : "";
+    const buildMode = conv?.buildMode ?? "build";
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -257,12 +278,14 @@ export const useChatStore = create<ChatState>()(
         signal: controller.signal,
         body: JSON.stringify({
           mode: useAppStore.getState().mode,
+          buildMode,
           model: modelId,
           messages: [...history, { role: "user", content: trimmed }],
           apiKey: settings.apiKey,
           baseUrl: settings.baseUrl,
           useRealApi: settings.useRealApi,
           agentInstructions: settings.agentInstructions,
+          projectRules,
         }),
       });
 
@@ -458,6 +481,7 @@ export const useChatStore = create<ChatState>()(
             c.streaming = false;
             if (!c.title) c.title = "";
             if (!c.updatedAt) c.updatedAt = Date.now();
+            if (!c.buildMode) c.buildMode = "build";
             c.steps = c.steps.map((st) =>
               st.status === "running" ? { ...st, status: "done" } : st
             );

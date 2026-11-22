@@ -12,6 +12,7 @@ import { RightPanel } from "@/components/workspace/RightPanel";
 import { SessionsPage } from "@/components/workspace/SessionsPage";
 import { TemplatesPage } from "@/components/workspace/TemplatesPage";
 import { ExtensionsPage } from "@/components/workspace/ExtensionsPage";
+import { ProjectsPage } from "@/components/workspace/ProjectsPage";
 import { CommandPalette } from "@/components/workspace/CommandPalette";
 import { SettingsModal } from "@/components/workspace/modals/SettingsModal";
 import { HoursExhaustedModal } from "@/components/workspace/modals/HoursExhaustedModal";
@@ -135,7 +136,7 @@ export default function Home() {
   const started = !!conv?.started;
 
   return (
-    <div className="flex min-h-screen flex-col bg-page text-foreground">
+    <div className="flex h-screen flex-col overflow-hidden bg-page text-foreground">
       <TopBar />
 
       <main
@@ -230,6 +231,7 @@ export default function Home() {
             {railPage === "sessions" && <SessionsPage />}
             {railPage === "templates" && <TemplatesPage />}
             {railPage === "extensions" && <ExtensionsPage />}
+            {railPage === "projects" && <ProjectsPage />}
           </section>
         )}
       </main>

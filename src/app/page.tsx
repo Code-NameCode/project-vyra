@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/sheet";
 import { useAppStore } from "@/stores/useAppStore";
 import { useChatStore } from "@/stores/useChatStore";
+import { useProvidersStore } from "@/stores/useProvidersStore";
 import { cn } from "@/lib/utils";
 
 function useMediaQuery(query: string): boolean {
@@ -92,6 +93,11 @@ export default function Home() {
   const ensure = useChatStore((s) => s.ensure);
 
   const isDesktop = useMediaQuery("(min-width: 1100px)");
+
+  // auto-detect locally installed Ollama models on mount (best-effort)
+  useEffect(() => {
+    void useProvidersStore.getState().detectOllama();
+  }, []);
 
   // make sure a conversation object exists for the active tab
   useEffect(() => {

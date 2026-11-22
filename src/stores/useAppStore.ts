@@ -22,6 +22,7 @@ interface AppState {
   closeTab: (id: string) => void;
   newChatTab: () => string;
   renameTab: (id: string, title: string) => void;
+  setTabProject: (tabId: string, projectId: string | undefined, projectName?: string) => void;
 
   // layout
   sidebarCollapsed: boolean;
@@ -140,6 +141,19 @@ export const useAppStore = create<AppState>()(
       renameTab: (id, title) =>
         set((s) => ({
           tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
+        })),
+      setTabProject: (tabId, projectId, projectName) =>
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            t.id === tabId
+              ? {
+                  ...t,
+                  projectId,
+                  type: projectId ? "project" : "chat",
+                  title: projectName && (!t.title || t.title === "New chat") ? projectName : t.title,
+                }
+              : t
+          ),
         })),
 
       sidebarCollapsed: false,

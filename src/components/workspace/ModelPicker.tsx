@@ -1,11 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import modelsData from "@/data/models.json";
-import type { ModelDef } from "@/lib/types";
+import {
+  listAllModelGroups,
+  resolveModelName,
+  type ModelGroup,
+  type PickModel,
+} from "@/lib/models";
+import type { Provider } from "@/lib/types";
 import {
   Popover,
   PopoverContent,
@@ -13,12 +18,9 @@ import {
 } from "@/components/ui/popover";
 import { useChatStore } from "@/stores/useChatStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { useProvidersStore } from "@/stores/useProvidersStore";
 
-const MODELS = modelsData as ModelDef[];
-
-function modelById(id: string): ModelDef | undefined {
-  return MODELS.find((m) => m.id === id);
-}
+type EnrichedGroup = ModelGroup & { type?: string };
 
 function MultiplierBadge({ multiplier }: { multiplier: number }) {
   let cls = "text-ws-secondary border-ws-border";
@@ -50,6 +52,8 @@ function MultiplierBadge({ multiplier }: { multiplier: number }) {
 
 /**
  * ModelPicker — a popover that lets the user switch the active model.
+ * Models are sourced from every enabled provider (Simulated + OpenAI +
+ * Anthropic + auto-detected Ollama) via `listAllModelGroups`, and grouped.
  * Controlled open state so callers (e.g. Composer slash command) can open it.
  */
 export function ModelPicker({
@@ -65,12 +69,37 @@ export function ModelPicker({
   const defaultModelId = useSettingsStore((s) => s.defaultModelId);
   const setModel = useChatStore((s) => s.setModel);
   const setDefaultModelId = useSettingsStore((s) => s.setDefaultModelId);
+  const providers = useProvidersStore((s) => s.providers);
+  const detecting = useProvidersStore((s) => s.detecting);
 
   const modelId = convModelId ?? defaultModelId;
-  const current = modelById(modelId) ?? MODELS[0];
+  const displayName = resolveModelName(modelId, providers);
 
-  const standard = MODELS.filter((m) => m.multiplier > 0);
-  const unlimited = MODELS.filter((m) => m.multiplier === 0);
+  // Build the grouped model list, tagging each provider group with its type
+  // so we can render badges. We also ensure an enabled Ollama provider always
+  // appears (even with zero detected models) so its empty/detecting state shows.
+  const groups = React.useMemo<EnrichedGroup[]>(() => {
+    const base = listAllModelGroups(providers);
+    const enriched: EnrichedGroup[] = base.map((g) => {
+      if (g.label === "Simulated") {
+        return { ...g, type: undefined };
+      }
+      const type =
+        g.models[0]?.providerType ??
+        providers.find((p) => p.name === g.label)?.type;
+      return { ...g, type };
+    });
+    const hasOllama = enriched.some((g) => g.type === "ollama");
+    if (!hasOllama) {
+      const ollama = providers.find(
+        (p) => p.type === "ollama" && p.enabled
+      );
+      if (ollama) {
+        enriched.push({ label: ollama.name, models: [], type: "ollama" });
+      }
+    }
+    return enriched;
+  }, [providers]);
 
   const handleSelect = (id: string) => {
     setModel(tabId, id);
@@ -78,7 +107,7 @@ export function ModelPicker({
     onOpenChange(false);
   };
 
-  const renderRow = (m: ModelDef) => {
+  const renderRow = (m: PickModel, isSimulated: boolean) => {
     const selected = m.id === modelId;
     return (
       <button
@@ -96,16 +125,24 @@ export function ModelPicker({
             <span className="text-[13px] font-medium text-foreground truncate">
               {m.name}
             </span>
-            <span className="text-[11px] text-ws-secondary shrink-0">
-              {m.contextWindow}
-            </span>
+            {isSimulated && m.contextWindow && (
+              <span className="text-[11px] text-ws-secondary shrink-0">
+                {m.contextWindow}
+              </span>
+            )}
           </div>
           <div className="text-[12px] text-ws-secondary line-clamp-1">
-            {m.description}
+            {isSimulated ? m.description : m.providerName}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <MultiplierBadge multiplier={m.multiplier} />
+          {isSimulated && m.multiplier !== undefined ? (
+            <MultiplierBadge multiplier={m.multiplier} />
+          ) : !isSimulated && m.providerType ? (
+            <span className="text-[10px] rounded-full px-1.5 py-0.5 border text-ws-secondary border-ws-border whitespace-nowrap">
+              {m.providerType}
+            </span>
+          ) : null}
           {selected && <Check className="size-3.5 text-accent-hi shrink-0" />}
         </div>
       </button>
@@ -123,7 +160,7 @@ export function ModelPicker({
             "hover:bg-hover transition-colors focus-ring max-w-[180px]"
           )}
         >
-          <span className="truncate">{current.name}</span>
+          <span className="truncate">{displayName}</span>
           <ChevronDown className="size-3.5 text-ws-secondary shrink-0" />
         </button>
       </PopoverTrigger>
@@ -131,18 +168,45 @@ export function ModelPicker({
         align="end"
         sideOffset={6}
         className={cn(
-          "w-[280px] p-1 rounded-[10px]",
+          "w-[300px] p-1 rounded-[10px]",
           "bg-popover border border-ws-border"
         )}
       >
-        <div className="text-[11px] uppercase tracking-wide text-ws-secondary px-2.5 pt-2 pb-1">
-          Standard
+        <div className="ws-scroll max-h-[340px] overflow-y-auto">
+          {groups.map((group) => {
+            const isSimulated = group.label === "Simulated";
+            const isOllama = group.type === "ollama";
+            const showEmpty = isOllama && group.models.length === 0 && !detecting;
+            return (
+              <div key={group.label}>
+                <div className="text-[11px] uppercase tracking-wide text-ws-secondary px-2.5 pt-2 pb-1 flex items-center gap-1.5">
+                  <span>{group.label}</span>
+                  {group.type && (
+                    <span className="text-[10px] text-ws-disabled normal-case tracking-normal">
+                      {group.type}
+                    </span>
+                  )}
+                </div>
+                {isOllama && detecting && (
+                  <div className="text-[12px] text-ws-secondary px-2.5 py-2 flex items-center gap-1.5">
+                    <Loader2 className="size-3.5 animate-spin shrink-0" />
+                    Detecting…
+                  </div>
+                )}
+                {showEmpty ? (
+                  <div className="text-[12px] text-ws-disabled px-2.5 py-2">
+                    No models detected — run `ollama serve` and click Detect in
+                    Settings
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    {group.models.map((m) => renderRow(m, isSimulated))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div className="flex flex-col gap-0.5">{standard.map(renderRow)}</div>
-        <div className="text-[11px] uppercase tracking-wide text-ws-secondary px-2.5 pt-3 pb-1">
-          Unlimited
-        </div>
-        <div className="flex flex-col gap-0.5">{unlimited.map(renderRow)}</div>
       </PopoverContent>
     </Popover>
   );

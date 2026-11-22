@@ -11,6 +11,8 @@ interface ChatRequestBody {
   mode?: "code" | "chat";
   buildMode?: "plan" | "build";
   model?: string;
+  providerType?: string;
+  providerId?: string;
   messages: InMessage[];
   apiKey?: string;
   baseUrl?: string;
@@ -86,36 +88,67 @@ export async function POST(req: NextRequest) {
   const messages = body.messages ?? [];
   const signal = req.signal;
 
-  // ---------- Real OpenAI-compatible path (plug-in later) ----------
-  if (body.useRealApi && body.apiKey && body.baseUrl) {
+  // ---------- Real provider path (OpenAI / Ollama / Anthropic / custom) ----------
+  const providerType = body.providerType;
+  const wantsReal =
+    body.useRealApi &&
+    !!body.baseUrl &&
+    (!!body.apiKey || providerType === "ollama");
+  if (wantsReal) {
     try {
-      const upstream = await fetch(`${body.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
+      const systemParts = [
+        body.agentInstructions,
+        body.projectRules ? `# Project rules\n${body.projectRules}` : undefined,
+        body.buildMode === "plan"
+          ? "You are in PLAN mode: propose a clear, step-by-step plan. Do NOT edit files or run commands. Outline the approach, the files you'd touch, and the order of work."
+          : undefined,
+      ].filter(Boolean) as string[];
+
+      const base = (body.baseUrl || "").replace(/\/$/, "");
+      let upstreamUrl: string;
+      let headers: Record<string, string>;
+      let reqBody: string;
+
+      if (providerType === "anthropic") {
+        upstreamUrl = `${base}/messages`;
+        headers = {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${body.apiKey}`,
-        },
-        body: JSON.stringify({
+          "x-api-key": body.apiKey || "",
+          "anthropic-version": "2023-06-01",
+        };
+        reqBody = JSON.stringify({
+          model: body.model ?? "claude-3-5-sonnet-latest",
+          max_tokens: 2048,
+          stream: true,
+          system: systemParts.join("\n\n"),
+          messages: messages.map((m) => ({
+            role: m.role === "system" ? "user" : m.role,
+            content: m.content,
+          })),
+        });
+      } else {
+        // openai-compatible (openai, ollama, custom)
+        const chatPath =
+          providerType === "ollama" ? "/v1/chat/completions" : "/chat/completions";
+        upstreamUrl = `${base}${chatPath}`;
+        headers = {
+          "Content-Type": "application/json",
+          ...(body.apiKey ? { Authorization: `Bearer ${body.apiKey}` } : {}),
+        };
+        reqBody = JSON.stringify({
           model: body.model ?? "gpt-4o-mini",
           stream: true,
           messages: [
-            ...([
-              body.agentInstructions,
-              body.projectRules
-                ? `# Project rules\n${body.projectRules}`
-                : undefined,
-              body.buildMode === "plan"
-                ? "You are in PLAN mode: propose a clear, step-by-step plan. Do NOT edit files or run commands. Outline the approach, the files you'd touch, and the order of work."
-                : undefined,
-            ]
-              .filter(Boolean)
-              .map((content) => ({
-                role: "system" as const,
-                content: content as string,
-              }))),
+            ...systemParts.map((content) => ({ role: "system", content })),
             ...messages,
           ],
-        }),
+        });
+      }
+
+      const upstream = await fetch(upstreamUrl, {
+        method: "POST",
+        headers,
+        body: reqBody,
         signal,
       });
 
@@ -141,16 +174,34 @@ export async function POST(req: NextRequest) {
                 const payload = line.slice(5).trim();
                 if (payload === "[DONE]") continue;
                 try {
-                  const json = JSON.parse(payload);
-                  const token: string | undefined =
-                    json?.choices?.[0]?.delta?.content;
+                  const json = JSON.parse(payload) as
+                    | { choices?: { delta?: { content?: string } }[] }
+                    | { type?: string; delta?: { text?: string } };
+                  let token: string | undefined;
+                  if (providerType === "anthropic") {
+                    const a = json as {
+                      type?: string;
+                      delta?: { text?: string };
+                    };
+                    token =
+                      a.type === "content_block_delta"
+                        ? a.delta?.text
+                        : undefined;
+                  } else {
+                    const o = json as {
+                      choices?: { delta?: { content?: string } }[];
+                    };
+                    token = o.choices?.[0]?.delta?.content;
+                  }
                   if (token) {
                     controller.enqueue(
-                      encoder.encode(encodeSSE({ type: "token", text: token }))
+                      encoder.encode(
+                        encodeSSE({ type: "token", text: token })
+                      )
                     );
                   }
                 } catch {
-                  /* ignore */
+                  /* ignore malformed lines */
                 }
               }
             }
@@ -161,7 +212,7 @@ export async function POST(req: NextRequest) {
                 encoder.encode(
                   encodeSSE({
                     type: "token",
-                    text: "_The configured API returned an error. Check your key and base URL in Settings._",
+                    text: "_The configured provider returned an error. Check the provider settings in Settings._",
                   })
                 )
               );

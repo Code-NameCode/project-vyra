@@ -1,0 +1,899 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import * as React from "react";
+     4→     4→import {
+     5→     5→  ArrowUp,
+     6→     6→  BookOpen,
+     7→     7→  Bot,
+     8→     8→  Brain,
+     9→     9→  Check,
+    10→    10→  ChevronDown,
+    11→    11→  CircleHelp,
+    12→    12→  Code2,
+    13→    13→  Cpu,
+    14→    14→  Eraser,
+    15→    15→  Feather,
+    16→    16→  File,
+    17→    17→  FileText,
+    18→    18→  FlaskConical,
+    19→    19→  Folder,
+    20→    20→  Hammer,
+    21→    21→  Map,
+    22→    22→  Mic,
+    23→    23→  Paperclip,
+    24→    24→  Plus,
+    25→    25→  Rocket,
+    26→    26→  ScanSearch,
+    27→    27→  Shuffle,
+    28→    28→  Sparkles,
+    29→    29→  Square,
+    30→    30→  TerminalSquare,
+    31→    31→  Wrench,
+    32→    32→  X,
+    33→    33→  Zap,
+    34→    34→} from "lucide-react";
+    35→    35→import type { LucideIcon } from "lucide-react";
+    36→    36→import { toast } from "sonner";
+    37→    37→
+    38→    38→import { cn } from "@/lib/utils";
+    39→    39→import { Textarea } from "@/components/ui/textarea";
+    40→    40→import {
+    41→    41→  DropdownMenu,
+    42→    42→  DropdownMenuContent,
+    43→    43→  DropdownMenuItem,
+    44→    44→  DropdownMenuTrigger,
+    45→    45→} from "@/components/ui/dropdown-menu";
+    46→    46→import {
+    47→    47→  Popover,
+    48→    48→  PopoverContent,
+    49→    49→  PopoverTrigger,
+    50→    50→} from "@/components/ui/popover";
+    51→    51→import { useChatStore } from "@/stores/useChatStore";
+    52→    52→import { useAppStore } from "@/stores/useAppStore";
+    53→    53→import { useProjectsStore } from "@/stores/useProjectsStore";
+    54→    54→import { useSettingsStore } from "@/stores/useSettingsStore";
+    55→    55→import { SLASH_COMMANDS } from "@/data/slashCommands";
+    56→    56→import { AGENTS } from "@/data/agents";
+    57→    57→import type {
+    58→    58→  AgentDef,
+    59→    59→  Conversation,
+    60→    60→  FileNode,
+    61→    61→  SlashCommand,
+    62→    62→} from "@/lib/types";
+    63→    63→import { ModelPicker } from "./ModelPicker";
+    64→    64→
+    65→    65→/* ---- minimal Web Speech API typing (no `any`) ---- */
+    66→    66→interface SpeechResultLike {
+    67→    67→  0: { transcript: string };
+    68→    68→  isFinal: boolean;
+    69→    69→  length: number;
+    70→    70→}
+    71→    71→interface SpeechEventLike {
+    72→    72→  results: ArrayLike<SpeechResultLike>;
+    73→    73→}
+    74→    74→interface SpeechRecognitionLike {
+    75→    75→  lang: string;
+    76→    76→  continuous: boolean;
+    77→    77→  interimResults: boolean;
+    78→    78→  start: () => void;
+    79→    79→  stop: () => void;
+    80→    80→  abort: () => void;
+    81→    81→  onresult: ((event: SpeechEventLike) => void) | null;
+    82→    82→  onerror: ((event: unknown) => void) | null;
+    83→    83→  onend: (() => void) | null;
+    84→    84→}
+    85→    85→type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+    86→    86→type WindowWithSpeech = Window & {
+    87→    87→  SpeechRecognition?: SpeechRecognitionCtor;
+    88→    88→  webkitSpeechRecognition?: SpeechRecognitionCtor;
+    89→    89→};
+    90→    90→
+    91→    91→/* ---- Plan / Build mode ---- */
+    92→    92→type BuildMode = "plan" | "build";
+    93→    93→// Other modules may extend Conversation/ChatState with buildMode. Access
+    94→    94→// defensively so the Composer keeps working whether or not the store has
+    95→    95→// been augmented yet.
+    96→    96→type ConvWithBuild = Conversation & { buildMode?: BuildMode };
+    97→    97→interface ChatStoreWithBuild {
+    98→    98→  setBuildMode?: (tabId: string, mode: BuildMode) => void;
+    99→    99→}
+   100→   100→
+   101→   101→/* ---- skill icon map for slash commands ---- */
+   102→   102→const SKILL_ICON: Record<string, LucideIcon> = {
+   103→   103→  brain: Brain,
+   104→   104→  hammer: Hammer,
+   105→   105→  scan: ScanSearch,
+   106→   106→  flask: FlaskConical,
+   107→   107→  wrench: Wrench,
+   108→   108→  book: BookOpen,
+   109→   109→  shuffle: Shuffle,
+   110→   110→  doc: FileText,
+   111→   111→  rocket: Rocket,
+   112→   112→  eraser: Eraser,
+   113→   113→  cpu: Cpu,
+   114→   114→  help: CircleHelp,
+   115→   115→};
+   116→   116→function skillIcon(key?: string): LucideIcon {
+   117→   117→  if (key && SKILL_ICON[key]) return SKILL_ICON[key];
+   118→   118→  return Sparkles;
+   119→   119→}
+   120→   120→
+   121→   121→/* ---- agent icon map ---- */
+   122→   122→const AGENT_ICON: Record<string, LucideIcon> = {
+   123→   123→  terminal: TerminalSquare,
+   124→   124→  bot: Bot,
+   125→   125→  code: Code2,
+   126→   126→  zap: Zap,
+   127→   127→  brain: Brain,
+   128→   128→  shuffle: Shuffle,
+   129→   129→  feather: Feather,
+   130→   130→  flask: FlaskConical,
+   131→   131→};
+   132→   132→function agentIcon(key?: string): LucideIcon {
+   133→   133→  if (key && AGENT_ICON[key]) return AGENT_ICON[key];
+   134→   134→  return Bot;
+   135→   135→}
+   136→   136→
+   137→   137→/* ---- @ context reference item ---- */
+   138→   138→type SlashCommandWithIcon = SlashCommand & { icon?: string };
+   139→   139→interface RefItem {
+   140→   140→  kind: "file" | "project";
+   141→   141→  name: string;
+   142→   142→  path: string;
+   143→   143→  icon: LucideIcon;
+   144→   144→}
+   145→   145→const EMPTY_FILES: FileNode[] = [];
+   146→   146→const EMPTY_SKILLS: string[] = [];
+   147→   147→
+   148→   148→/** Strip a leading `/` from a slash command label (e.g. "/review" -> "review"). */
+   149→   149→function stripSlash(label: string): string {
+   150→   150→  return label.replace(/^\//, "");
+   151→   151→}
+   152→   152→
+   153→   153→/**
+   154→   154→ * Composer — the core prompt input.
+   155→   155→ * Auto-growing textarea, slash command popup (with skill icons) that adds
+   156→   156→ * action skills as removable chips, Codex-style `@` context referencing,
+   157→   157→ * attach menu, Plan/Build mode selector, agent picker chip, model picker
+   158→   158→ * chip, and a send/stop/voice button.
+   159→   159→ */
+   160→   160→export function Composer({ tabId }: { tabId: string }) {
+   161→   161→  const ensure = useChatStore((s) => s.ensure);
+   162→   162→  const draft = useChatStore((s) => s.conversations[tabId]?.composerDraft ?? "");
+   163→   163→  const streaming = useChatStore(
+   164→   164→    (s) => s.conversations[tabId]?.streaming ?? false
+   165→   165→  );
+   166→   166→  const convModelId = useChatStore((s) => s.conversations[tabId]?.modelId);
+   167→   167→  const defaultModelId = useSettingsStore((s) => s.defaultModelId);
+   168→   168→  const setComposerDraft = useChatStore((s) => s.setComposerDraft);
+   169→   169→  const sendMessage = useChatStore((s) => s.sendMessage);
+   170→   170→  const stopStreaming = useChatStore((s) => s.stopStreaming);
+   171→   171→  const clearConversation = useChatStore((s) => s.clearConversation);
+   172→   172→
+   173→   173→  /* ---- skills (multi-chip) ---- */
+   174→   174→  const skills = useChatStore(
+   175→   175→    (s) => s.conversations[tabId]?.skills ?? EMPTY_SKILLS
+   176→   176→  );
+   177→   177→  const addSkill = useChatStore((s) => s.addSkill);
+   178→   178→  const removeSkill = useChatStore((s) => s.removeSkill);
+   179→   179→
+   180→   180→  /* ---- agent picker ---- */
+   181→   181→  const agentId = useChatStore(
+   182→   182→    (s) => s.conversations[tabId]?.agentId ?? ""
+   183→   183→  );
+   184→   184→  const setAgent = useChatStore((s) => s.setAgent);
+   185→   185→
+   186→   186→  /* ---- Plan / Build mode (defensive: works with or without store support) ---- */
+   187→   187→  const storeBuildMode = useChatStore(
+   188→   188→    (s) =>
+   189→   189→      (s.conversations[tabId] as ConvWithBuild | undefined)?.buildMode ??
+   190→   190→      ("build" as BuildMode)
+   191→   191→  );
+   192→   192→  const storeSetBuildMode = useChatStore(
+   193→   193→    (s) => (s as unknown as ChatStoreWithBuild).setBuildMode
+   194→   194→  );
+   195→   195→  const [localBuildMode, setLocalBuildMode] =
+   196→   196→    React.useState<BuildMode>("build");
+   197→   197→  const buildMode: BuildMode = storeSetBuildMode
+   198→   198→    ? (storeBuildMode as BuildMode)
+   199→   199→    : localBuildMode;
+   200→   200→  const setBuildMode = React.useCallback(
+   201→   201→    (mode: BuildMode) => {
+   202→   202→      if (storeSetBuildMode) storeSetBuildMode(tabId, mode);
+   203→   203→      else setLocalBuildMode(mode);
+   204→   204→    },
+   205→   205→    [storeSetBuildMode, tabId]
+   206→   206→  );
+   207→   207→
+   208→   208→  /* ---- active workspace (reactive) for `@` referencing ---- */
+   209→   209→  const projectId = useAppStore(
+   210→   210→    (s) => s.tabs.find((t) => t.id === tabId)?.projectId
+   211→   211→  );
+   212→   212→  const projects = useProjectsStore((s) => s.projects);
+   213→   213→  const convFiles = useChatStore(
+   214→   214→    (s) => s.conversations[tabId]?.workspace.files
+   215→   215→  );
+   216→   216→
+   217→   217→  const files = React.useMemo<FileNode[]>(() => {
+   218→   218→    if (projectId) {
+   219→   219→      return (
+   220→   220→        projects.find((p) => p.id === projectId)?.workspace.files ??
+   221→   221→        EMPTY_FILES
+   222→   222→      );
+   223→   223→    }
+   224→   224→    return convFiles ?? EMPTY_FILES;
+   225→   225→  }, [projectId, projects, convFiles]);
+   226→   226→
+   227→   227→  const refItems = React.useMemo<RefItem[]>(() => {
+   228→   228→    const fileItems: RefItem[] = files.map((f) => ({
+   229→   229→      kind: "file",
+   230→   230→      name: f.name,
+   231→   231→      path: f.path,
+   232→   232→      icon: File,
+   233→   233→    }));
+   234→   234→    const projItems: RefItem[] = projects.map((p) => ({
+   235→   235→      kind: "project",
+   236→   236→      name: p.name,
+   237→   237→      path: p.name,
+   238→   238→      icon: Folder,
+   239→   239→    }));
+   240→   240→    return [...fileItems, ...projItems];
+   241→   241→  }, [files, projects]);
+   242→   242→
+   243→   243→  const modelId = convModelId ?? defaultModelId;
+   244→   244→
+   245→   245→  const taRef = React.useRef<HTMLTextAreaElement>(null);
+   246→   246→  const [modelOpen, setModelOpen] = React.useState(false);
+   247→   247→  const [agentOpen, setAgentOpen] = React.useState(false);
+   248→   248→  const [slashSuppressed, setSlashSuppressed] = React.useState(false);
+   249→   249→  const [selIndex, setSelIndex] = React.useState(0);
+   250→   250→  const [atSuppressed, setAtSuppressed] = React.useState(false);
+   251→   251→  const [atIndex, setAtIndex] = React.useState(0);
+   252→   252→
+   253→   253→  // ensure a conversation object exists so modelId/draft are stable
+   254→   254→  React.useEffect(() => {
+   255→   255→    ensure(tabId);
+   256→   256→  }, [tabId, ensure]);
+   257→   257→
+   258→   258→  // auto-grow textarea whenever draft changes (covers typing + external updates)
+   259→   259→  React.useLayoutEffect(() => {
+   260→   260→    const ta = taRef.current;
+   261→   261→    if (!ta) return;
+   262→   262→    ta.style.height = "auto";
+   263→   263→    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+   264→   264→  }, [draft]);
+   265→   265→
+   266→   266→  // reset slash + @ suppression + selection whenever draft changes
+   267→   267→  React.useEffect(() => {
+   268→   268→    setSlashSuppressed(false);
+   269→   269→    setSelIndex(0);
+   270→   270→    setAtSuppressed(false);
+   271→   271→    setAtIndex(0);
+   272→   272→  }, [draft]);
+   273→   273→
+   274→   274→  /* ---- slash command popup derivation ---- */
+   275→   275→  const slashWithIcons = React.useMemo<SlashCommandWithIcon[]>(
+   276→   276→    () => SLASH_COMMANDS as SlashCommandWithIcon[],
+   277→   277→    []
+   278→   278→  );
+   279→   279→  const isSlashDraft =
+   280→   280→    draft.startsWith("/") &&
+   281→   281→    !draft.slice(1).includes(" ") &&
+   282→   282→    !streaming;
+   283→   283→  const filtered = React.useMemo<SlashCommand[]>(() => {
+   284→   284→    if (!isSlashDraft) return [];
+   285→   285→    const q = draft.slice(1).toLowerCase();
+   286→   286→    if (!q) return slashWithIcons;
+   287→   287→    return slashWithIcons.filter(
+   288→   288→      (c) =>
+   289→   289→        c.label.toLowerCase().includes(q) ||
+   290→   290→        c.id.toLowerCase().includes(q) ||
+   291→   291→        c.hint.toLowerCase().includes(q)
+   292→   292→    );
+   293→   293→  }, [isSlashDraft, draft, slashWithIcons]);
+   294→   294→  const slashVisible = isSlashDraft && !slashSuppressed && filtered.length > 0;
+   295→   295→
+   296→   296→  /* ---- @ context reference popup derivation ---- */
+   297→   297→  const atQuery = React.useMemo<{ index: number; query: string } | null>(() => {
+   298→   298→    const lastAt = draft.lastIndexOf("@");
+   299→   299→    if (lastAt === -1) return null;
+   300→   300→    const after = draft.slice(lastAt + 1);
+   301→   301→    // the query is the text from the last "@" to the end of the draft;
+   302→   302→    // any whitespace terminates it.
+   303→   303→    if (/\s/.test(after)) return null;
+   304→   304→    return { index: lastAt, query: after };
+   305→   305→  }, [draft]);
+   306→   306→
+   307→   307→  const atFiltered = React.useMemo<RefItem[]>(() => {
+   308→   308→    if (!atQuery) return [];
+   309→   309→    const q = atQuery.query.toLowerCase();
+   310→   310→    const list = q
+   311→   311→      ? refItems.filter(
+   312→   312→          (it) =>
+   313→   313→            it.name.toLowerCase().includes(q) ||
+   314→   314→            it.path.toLowerCase().includes(q)
+   315→   315→        )
+   316→   316→      : refItems;
+   317→   317→    return list.slice(0, 12);
+   318→   318→  }, [atQuery, refItems]);
+   319→   319→
+   320→   320→  const atVisible =
+   321→   321→    !streaming &&
+   322→   322→    !slashVisible &&
+   323→   323→    atQuery !== null &&
+   324→   324→    !atSuppressed &&
+   325→   325→    atFiltered.length > 0;
+   326→   326→
+   327→   327→  // keep atIndex within bounds when the filtered list shrinks
+   328→   328→  React.useEffect(() => {
+   329→   329→    if (atFiltered.length > 0 && atIndex >= atFiltered.length) {
+   330→   330→      setAtIndex(0);
+   331→   331→    }
+   332→   332→  }, [atFiltered, atIndex]);
+   333→   333→
+   334→   334→  /* ---- actions ---- */
+   335→   335→  const handleSend = React.useCallback(() => {
+   336→   336→    if (streaming) return;
+   337→   337→    const text = useChatStore.getState().conversations[tabId]?.composerDraft ?? "";
+   338→   338→    if (!text.trim()) return;
+   339→   339→    void sendMessage(tabId, text, modelId);
+   340→   340→  }, [streaming, tabId, modelId, sendMessage]);
+   341→   341→
+   342→   342→  const selectCommand = React.useCallback(
+   343→   343→    (cmd: SlashCommand) => {
+   344→   344→      // Read the live draft + skills from the store to avoid stale closures.
+   345→   345→      const currentDraft =
+   346→   346→        useChatStore.getState().conversations[tabId]?.composerDraft ?? "";
+   347→   347→      const beforeSlash = currentDraft.slice(0, currentDraft.lastIndexOf("/"));
+   348→   348→      const focusTextarea = () =>
+   349→   349→        requestAnimationFrame(() => taRef.current?.focus());
+   350→   350→
+   351→   351→      if (cmd.id === "model") {
+   352→   352→        setComposerDraft(tabId, "");
+   353→   353→        setModelOpen(true);
+   354→   354→        return;
+   355→   355→      }
+   356→   356→      if (cmd.id === "clear") {
+   357→   357→        clearConversation(tabId);
+   358→   358→        setComposerDraft(tabId, "");
+   359→   359→        toast("Conversation cleared");
+   360→   360→        return;
+   361→   361→      }
+   362→   362→      if (cmd.id === "help") {
+   363→   363→        setComposerDraft(tabId, "");
+   364→   364→        toast("Press / for commands · Enter to send · Shift+Enter for newline", {
+   365→   365→          duration: 4000,
+   366→   366→        });
+   367→   367→        return;
+   368→   368→      }
+   369→   369→      if (cmd.id === "plan") {
+   370→   370→        setBuildMode("plan");
+   371→   371→        setComposerDraft(tabId, beforeSlash);
+   372→   372→        toast("Switched to Plan");
+   373→   373→        focusTextarea();
+   374→   374→        return;
+   375→   375→      }
+   376→   376→      if (cmd.id === "build") {
+   377→   377→        setBuildMode("build");
+   378→   378→        setComposerDraft(tabId, beforeSlash);
+   379→   379→        toast("Switched to Build");
+   380→   380→        focusTextarea();
+   381→   381→        return;
+   382→   382→      }
+   383→   383→      // action skills (review, test, fix, explain, refactor, document, init):
+   384→   384→      // add as a removable chip instead of inserting text.
+   385→   385→      const currentSkills =
+   386→   386→        useChatStore.getState().conversations[tabId]?.skills ?? [];
+   387→   387→      if (currentSkills.includes(cmd.id)) {
+   388→   388→        toast("Already added");
+   389→   389→      } else {
+   390→   390→        addSkill(tabId, cmd.id);
+   391→   391→        toast(`${stripSlash(cmd.label)} skill added`);
+   392→   392→      }
+   393→   393→      setComposerDraft(tabId, beforeSlash);
+   394→   394→      focusTextarea();
+   395→   395→    },
+   396→   396→    [
+   397→   397→      tabId,
+   398→   398→      setComposerDraft,
+   399→   399→      clearConversation,
+   400→   400→      addSkill,
+   401→   401→      setBuildMode,
+   402→   402→    ]
+   403→   403→  );
+   404→   404→
+   405→   405→  const selectRef = React.useCallback(
+   406→   406→    (item: RefItem) => {
+   407→   407→      if (!atQuery) return;
+   408→   408→      const before = draft.slice(0, atQuery.index);
+   409→   409→      const next = `${before}@${item.name} `;
+   410→   410→      setComposerDraft(tabId, next);
+   411→   411→      requestAnimationFrame(() => taRef.current?.focus());
+   412→   412→    },
+   413→   413→    [atQuery, draft, setComposerDraft, tabId]
+   414→   414→  );
+   415→   415→
+   416→   416→  /* ---- keyboard ---- */
+   417→   417→  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+   418→   418→    if (slashVisible) {
+   419→   419→      if (e.key === "ArrowDown") {
+   420→   420→        e.preventDefault();
+   421→   421→        setSelIndex((i) => (i + 1) % filtered.length);
+   422→   422→        return;
+   423→   423→      }
+   424→   424→      if (e.key === "ArrowUp") {
+   425→   425→        e.preventDefault();
+   426→   426→        setSelIndex((i) => (i - 1 + filtered.length) % filtered.length);
+   427→   427→        return;
+   428→   428→      }
+   429→   429→      if (e.key === "Enter") {
+   430→   430→        e.preventDefault();
+   431→   431→        const cmd = filtered[selIndex] ?? filtered[0];
+   432→   432→        if (cmd) selectCommand(cmd);
+   433→   433→        return;
+   434→   434→      }
+   435→   435→      if (e.key === "Escape") {
+   436→   436→        e.preventDefault();
+   437→   437→        setSlashSuppressed(true);
+   438→   438→        return;
+   439→   439→      }
+   440→   440→      if (e.key === "Tab") {
+   441→   441→        e.preventDefault();
+   442→   442→        const cmd = filtered[selIndex] ?? filtered[0];
+   443→   443→        if (cmd) selectCommand(cmd);
+   444→   444→        return;
+   445→   445→      }
+   446→   446→    }
+   447→   447→    if (atVisible) {
+   448→   448→      if (e.key === "ArrowDown") {
+   449→   449→        e.preventDefault();
+   450→   450→        setAtIndex((i) => (i + 1) % atFiltered.length);
+   451→   451→        return;
+   452→   452→      }
+   453→   453→      if (e.key === "ArrowUp") {
+   454→   454→        e.preventDefault();
+   455→   455→        setAtIndex((i) => (i - 1 + atFiltered.length) % atFiltered.length);
+   456→   456→        return;
+   457→   457→      }
+   458→   458→      if (e.key === "Enter" || e.key === "Tab") {
+   459→   459→        e.preventDefault();
+   460→   460→        const item = atFiltered[atIndex] ?? atFiltered[0];
+   461→   461→        if (item) selectRef(item);
+   462→   462→        return;
+   463→   463→      }
+   464→   464→      if (e.key === "Escape") {
+   465→   465→        e.preventDefault();
+   466→   466→        setAtSuppressed(true);
+   467→   467→        return;
+   468→   468→      }
+   469→   469→    }
+   470→   470→    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+   471→   471→      if (!streaming && draft.trim()) {
+   472→   472→        e.preventDefault();
+   473→   473→        handleSend();
+   474→   474→      }
+   475→   475→    }
+   476→   476→  };
+   477→   477→
+   478→   478→  /* ---- voice ---- */
+   479→   479→  const startVoice = React.useCallback(() => {
+   480→   480→    const w = window as WindowWithSpeech;
+   481→   481→    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+   482→   482→    if (!Ctor) {
+   483→   483→      toast.error("Voice input not supported in this browser");
+   484→   484→      return;
+   485→   485→    }
+   486→   486→    try {
+   487→   487→      const rec = new Ctor();
+   488→   488→      rec.lang = "en-US";
+   489→   489→      rec.continuous = false;
+   490→   490→      rec.interimResults = false;
+   491→   491→      rec.onresult = (event: SpeechEventLike) => {
+   492→   492→        let transcript = "";
+   493→   493→        for (let i = 0; i < event.results.length; i++) {
+   494→   494→          transcript += event.results[i][0].transcript;
+   495→   495→        }
+   496→   496→        if (!transcript) return;
+   497→   497→        const cur =
+   498→   498→          useChatStore.getState().conversations[tabId]?.composerDraft ?? "";
+   499→   499→        const next = (cur ? cur + " " : "") + transcript.trim();
+   500→   500→        setComposerDraft(tabId, next);
+   501→   501→      };
+   502→   502→      rec.onerror = () => {
+   503→   503→        toast.error("Voice input failed");
+   504→   504→      };
+   505→   505→      rec.start();
+   506→   506→      toast("Listening…", { duration: 2500 });
+   507→   507→    } catch {
+   508→   508→      toast.error("Voice input could not start");
+   509→   509→    }
+   510→   510→  }, [tabId, setComposerDraft]);
+   511→   511→
+   512→   512→  /* ---- send button state ---- */
+   513→   513→  const canSend = draft.trim().length > 0;
+   514→   514→  const sendState: "send" | "stop" | "voice" = streaming
+   515→   515→    ? "stop"
+   516→   516→    : canSend
+   517→   517→    ? "send"
+   518→   518→    : "voice";
+   519→   519→
+   520→   520→  const onSendClick = () => {
+   521→   521→    if (sendState === "stop") stopStreaming(tabId);
+   522→   522→    else if (sendState === "send") handleSend();
+   523→   523→    else startVoice();
+   524→   524→  };
+   525→   525→
+   526→   526→  const SendIcon = sendState === "stop" ? Square : sendState === "send" ? ArrowUp : Mic;
+   527→   527→  const sendLabel = sendState === "stop" ? "Stop" : sendState === "send" ? "Send" : "Voice";
+   528→   528→
+   529→   529→  /* ---- active agent (for the trigger chip) ---- */
+   530→   530→  const activeAgent: AgentDef | undefined = agentId
+   531→   531→    ? AGENTS.find((a) => a.id === agentId)
+   532→   532→    : undefined;
+   533→   533→  const agentTriggerName = activeAgent ? activeAgent.name : "Agent";
+   534→   534→
+   535→   535→  const handleAgentSelect = (id: string, name: string) => {
+   536→   536→    setAgent(tabId, id);
+   537→   537→    setAgentOpen(false);
+   538→   538→    toast(`${name} selected`);
+   539→   539→  };
+   540→   540→
+   541→   541→  return (
+   542→   542→    <div className="relative w-full">
+   543→   543→      {/* slash command popup (above the box) */}
+   544→   544→      {slashVisible && (
+   545→   545→        <div
+   546→   546→          className={cn(
+   547→   547→            "absolute bottom-full mb-2 left-0 w-[300px] z-30",
+   548→   548→            "rounded-[12px] border border-ws-border bg-popover p-1.5 ws-fade-in",
+   549→   549→            "shadow-2xl max-h-[260px] overflow-y-auto ws-scroll"
+   550→   550→          )}
+   551→   551→          role="listbox"
+   552→   552→        >
+   553→   553→          {filtered.map((c, i) => {
+   554→   554→            const Icon = skillIcon(
+   555→   555→              (c as SlashCommandWithIcon).icon
+   556→   556→            );
+   557→   557→            return (
+   558→   558→              <button
+   559→   559→                type="button"
+   560→   560→                key={c.id}
+   561→   561→                onMouseEnter={() => setSelIndex(i)}
+   562→   562→                onClick={() => selectCommand(c)}
+   563→   563→                className={cn(
+   564→   564→                  "w-full flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 cursor-pointer",
+   565→   565→                  "transition-colors text-left",
+   566→   566→                  i === selIndex ? "bg-hover" : "hover:bg-hover"
+   567→   567→                )}
+   568→   568→              >
+   569→   569→                <Icon
+   570→   570→                  className={cn(
+   571→   571→                    "size-4 shrink-0",
+   572→   572→                    i === selIndex ? "text-accent-hi" : "text-ws-secondary"
+   573→   573→                  )}
+   574→   574→                />
+   575→   575→                <div className="min-w-0">
+   576→   576→                  <div className="text-[13px] font-medium text-foreground">
+   577→   577→                    {c.label}
+   578→   578→                  </div>
+   579→   579→                  <div className="text-[12px] text-ws-secondary line-clamp-1">
+   580→   580→                    {c.description}
+   581→   581→                  </div>
+   582→   582→                </div>
+   583→   583→              </button>
+   584→   584→            );
+   585→   585→          })}
+   586→   586→        </div>
+   587→   587→      )}
+   588→   588→
+   589→   589→      {/* `@` context reference popup (above the box) */}
+   590→   590→      {atVisible && (
+   591→   591→        <div
+   592→   592→          className={cn(
+   593→   593→            "absolute bottom-full mb-2 left-0 w-[320px] z-30",
+   594→   594→            "rounded-[12px] border border-ws-border bg-popover p-1.5 ws-fade-in",
+   595→   595→            "shadow-2xl max-h-[280px] overflow-y-auto ws-scroll"
+   596→   596→          )}
+   597→   597→          role="listbox"
+   598→   598→        >
+   599→   599→          {atFiltered.map((item, i) => {
+   600→   600→            const ItemIcon = item.icon;
+   601→   601→            return (
+   602→   602→              <button
+   603→   603→                type="button"
+   604→   604→                key={`${item.kind}-${item.path}`}
+   605→   605→                onMouseEnter={() => setAtIndex(i)}
+   606→   606→                onClick={() => selectRef(item)}
+   607→   607→                className={cn(
+   608→   608→                  "w-full flex items-center gap-2 rounded-[8px] px-2.5 py-2",
+   609→   609→                  "text-left cursor-pointer transition-colors",
+   610→   610→                  i === atIndex ? "bg-hover" : "hover:bg-hover"
+   611→   611→                )}
+   612→   612→              >
+   613→   613→                <ItemIcon className="size-3.5 shrink-0 text-ws-secondary" />
+   614→   614→                <div className="min-w-0 flex-1">
+   615→   615→                  <div className="text-[13px] text-foreground truncate">
+   616→   616→                    {item.name}
+   617→   617→                  </div>
+   618→   618→                  <div className="text-[11px] text-ws-disabled truncate">
+   619→   619→                    {item.kind === "project" ? "project" : item.path}
+   620→   620→                  </div>
+   621→   621→                </div>
+   622→   622→              </button>
+   623→   623→            );
+   624→   624→          })}
+   625→   625→        </div>
+   626→   626→      )}
+   627→   627→
+   628→   628→      {/* composer box */}
+   629→   629→      <div
+   630→   630→        className={cn(
+   631→   631→          "relative rounded-[14px] border border-ws-border",
+   632→   632→          "bg-card-ws p-3.5 transition-colors duration-150",
+   633→   633→          "focus-within:border-accent-fill/50"
+   634→   634→        )}
+   635→   635→      >
+   636→   636→        {/* skills chip row (above the textarea, only when skills exist) */}
+   637→   637→        {skills.length > 0 && (
+   638→   638→          <div className="flex flex-wrap gap-1.5 mb-2 ws-fade-in">
+   639→   639→            {skills.map((skillId) => {
+   640→   640→              const cmd = SLASH_COMMANDS.find((c) => c.id === skillId);
+   641→   641→              const Icon = cmd ? skillIcon(cmd.icon) : Sparkles;
+   642→   642→              const label = cmd ? stripSlash(cmd.label) : skillId;
+   643→   643→              return (
+   644→   644→                <span
+   645→   645→                  key={skillId}
+   646→   646→                  className={cn(
+   647→   647→                    "inline-flex items-center gap-1 rounded-full",
+   648→   648→                    "border border-ws-border bg-hover pl-2 pr-1 py-0.5",
+   649→   649→                    "text-[12px] text-foreground"
+   650→   650→                  )}
+   651→   651→                >
+   652→   652→                  <Icon className="size-3 text-accent-hi" />
+   653→   653→                  {label}
+   654→   654→                  <button
+   655→   655→                    type="button"
+   656→   656→                    aria-label="Remove skill"
+   657→   657→                    onClick={() => removeSkill(tabId, skillId)}
+   658→   658→                    className={cn(
+   659→   659→                      "inline-flex items-center justify-center size-4 rounded-full",
+   660→   660→                      "text-ws-secondary hover:text-foreground hover:bg-card-ws",
+   661→   661→                      "transition-colors focus-ring"
+   662→   662→                    )}
+   663→   663→                  >
+   664→   664→                    <X className="size-3" />
+   665→   665→                  </button>
+   666→   666→                </span>
+   667→   667→              );
+   668→   668→            })}
+   669→   669→          </div>
+   670→   670→        )}
+   671→   671→
+   672→   672→        <Textarea
+   673→   673→          ref={taRef}
+   674→   674→          value={draft}
+   675→   675→          onChange={(e) => setComposerDraft(tabId, e.target.value)}
+   676→   676→          onKeyDown={onKeyDown}
+   677→   677→          rows={1}
+   678→   678→          placeholder="Ask Goodstuff-Agent... Use / for commands"
+   679→   679→          className={cn(
+   680→   680→            "bg-transparent border-0 resize-none p-0 m-0",
+   681→   681→            "text-[15px] leading-[1.55] text-foreground",
+   682→   682→            "placeholder:text-ws-secondary/80",
+   683→   683→            "focus-visible:ring-0 outline-none shadow-none",
+   684→   684→            "max-h-[200px] min-h-[28px] ws-scroll",
+   685→   685→            "[field-sizing:none]"
+   686→   686→          )}
+   687→   687→        />
+   688→   688→
+   689→   689→        {/* bottom row */}
+   690→   690→        <div className="flex items-center justify-between mt-2.5 gap-2">
+   691→   691→          {/* left cluster: attach + Plan/Build selector + agent picker */}
+   692→   692→          <div className="flex items-center gap-1.5">
+   693→   693→            <DropdownMenu>
+   694→   694→              <DropdownMenuTrigger asChild>
+   695→   695→                <button
+   696→   696→                  type="button"
+   697→   697→                  aria-label="Attach"
+   698→   698→                  className={cn(
+   699→   699→                    "inline-flex items-center justify-center size-8",
+   700→   700→                    "rounded-[8px] text-ws-secondary hover:bg-hover hover:text-foreground",
+   701→   701→                    "transition-colors focus-ring"
+   702→   702→                  )}
+   703→   703→                >
+   704→   704→                  <Plus className="size-4" />
+   705→   705→                </button>
+   706→   706→              </DropdownMenuTrigger>
+   707→   707→              <DropdownMenuContent
+   708→   708→                align="start"
+   709→   709→                sideOffset={6}
+   710→   710→                className={cn(
+   711→   711→                  "min-w-[160px] p-1 rounded-[10px]",
+   712→   712→                  "bg-popover border border-ws-border"
+   713→   713→                )}
+   714→   714→              >
+   715→   715→                <DropdownMenuItem
+   716→   716→                  onSelect={() => toast.info("Attachments are simulated")}
+   717→   717→                  className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+   718→   718→                >
+   719→   719→                  <Paperclip className="size-4 text-ws-secondary" />
+   720→   720→                  Attach file
+   721→   721→                </DropdownMenuItem>
+   722→   722→                <DropdownMenuItem
+   723→   723→                  onSelect={() => toast.info("Attachments are simulated")}
+   724→   724→                  className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+   725→   725→                >
+   726→   726→                  <Plus className="size-4 text-ws-secondary" />
+   727→   727→                  Attach image
+   728→   728→                </DropdownMenuItem>
+   729→   729→              </DropdownMenuContent>
+   730→   730→            </DropdownMenu>
+   731→   731→
+   732→   732→            {/* Plan / Build mode selector */}
+   733→   733→            <div
+   734→   734→              className={cn(
+   735→   735→                "inline-flex items-center rounded-[8px] border border-ws-border",
+   736→   736→                "bg-card-ws p-0.5"
+   737→   737→              )}
+   738→   738→              role="group"
+   739→   739→              aria-label="Build mode"
+   740→   740→            >
+   741→   741→              {(["plan", "build"] as BuildMode[]).map((mode) => {
+   742→   742→                const active = buildMode === mode;
+   743→   743→                const ModeIcon = mode === "plan" ? Map : Hammer;
+   744→   744→                return (
+   745→   745→                  <button
+   746→   746→                    key={mode}
+   747→   747→                    type="button"
+   748→   748→                    onClick={() => setBuildMode(mode)}
+   749→   749→                    aria-pressed={active}
+   750→   750→                    className={cn(
+   751→   751→                      "inline-flex items-center gap-1 h-7 px-2.5 rounded-[6px]",
+   752→   752→                      "text-[12px] font-medium transition-colors focus-ring",
+   753→   753→                      active
+   754→   754→                        ? "bg-accent-fill text-white"
+   755→   755→                        : "text-ws-secondary hover:text-foreground"
+   756→   756→                    )}
+   757→   757→                  >
+   758→   758→                    <ModeIcon className="size-3.5" />
+   759→   759→                    {mode === "plan" ? "Plan" : "Build"}
+   760→   760→                  </button>
+   761→   761→                );
+   762→   762→              })}
+   763→   763→            </div>
+   764→   764→
+   765→   765→            {/* agent picker */}
+   766→   766→            <Popover open={agentOpen} onOpenChange={setAgentOpen}>
+   767→   767→              <PopoverTrigger asChild>
+   768→   768→                <button
+   769→   769→                  type="button"
+   770→   770→                  aria-label="Pick agent"
+   771→   771→                  className={cn(
+   772→   772→                    "inline-flex items-center gap-1.5 h-8 px-2.5",
+   773→   773→                    "rounded-[8px] border border-ws-border bg-card-ws",
+   774→   774→                    "text-[12px] text-foreground hover:bg-hover",
+   775→   775→                    "transition-colors focus-ring"
+   776→   776→                  )}
+   777→   777→                >
+   778→   778→                  {React.createElement(agentIcon(activeAgent?.icon), {
+   779→   779→                    className: "size-3.5 text-accent-hi",
+   780→   780→                  })}
+   781→   781→                  <span className="truncate max-w-[120px]">
+   782→   782→                    {agentTriggerName}
+   783→   783→                  </span>
+   784→   784→                  <ChevronDown className="size-3 text-ws-secondary shrink-0" />
+   785→   785→                </button>
+   786→   786→              </PopoverTrigger>
+   787→   787→              <PopoverContent
+   788→   788→                align="start"
+   789→   789→                sideOffset={6}
+   790→   790→                className={cn(
+   791→   791→                  "w-[300px] p-1 rounded-[10px]",
+   792→   792→                  "bg-popover border border-ws-border"
+   793→   793→                )}
+   794→   794→              >
+   795→   795→                {/* None option (clears the agent) */}
+   796→   796→                <button
+   797→   797→                  type="button"
+   798→   798→                  onClick={() => handleAgentSelect("", "None")}
+   799→   799→                  className={cn(
+   800→   800→                    "w-full rounded-[8px] px-2.5 py-2 flex items-start gap-2",
+   801→   801→                    "text-left transition-colors cursor-pointer hover:bg-hover",
+   802→   802→                    agentId === "" && "bg-hover"
+   803→   803→                  )}
+   804→   804→                >
+   805→   805→                  <div className="size-7 rounded-[8px] bg-hover flex items-center justify-center shrink-0">
+   806→   806→                    <Bot className="size-4 text-accent-hi" />
+   807→   807→                  </div>
+   808→   808→                  <div className="min-w-0 flex-1">
+   809→   809→                    <div className="text-[13px] font-medium text-foreground">
+   810→   810→                      None
+   811→   811→                    </div>
+   812→   812→                    <div className="text-[12px] text-ws-secondary line-clamp-1">
+   813→   813→                      No specific agent
+   814→   814→                    </div>
+   815→   815→                  </div>
+   816→   816→                  {agentId === "" && (
+   817→   817→                    <Check className="size-3.5 text-accent-hi ml-auto shrink-0" />
+   818→   818→                  )}
+   819→   819→                </button>
+   820→   820→
+   821→   821→                <div className="text-[11px] uppercase tracking-wide text-ws-secondary px-2.5 pt-2 pb-1">
+   822→   822→                  Detected agents
+   823→   823→                </div>
+   824→   824→
+   825→   825→                {AGENTS.map((a) => {
+   826→   826→                  const Icon = agentIcon(a.icon);
+   827→   827→                  const selected = a.id === agentId;
+   828→   828→                  return (
+   829→   829→                    <div
+   830→   830→                      key={a.id}
+   831→   831→                      title={
+   832→   832→                        a.detected ? undefined : "Not detected on this machine"
+   833→   833→                      }
+   834→   834→                      onClick={
+   835→   835→                        a.detected
+   836→   836→                          ? () => handleAgentSelect(a.id, a.name)
+   837→   837→                          : undefined
+   838→   838→                      }
+   839→   839→                      className={cn(
+   840→   840→                        "rounded-[8px] px-2.5 py-2 flex items-start gap-2",
+   841→   841→                        "transition-colors",
+   842→   842→                        a.detected
+   843→   843→                          ? "hover:bg-hover cursor-pointer"
+   844→   844→                          : "opacity-50",
+   845→   845→                        selected && "bg-hover"
+   846→   846→                      )}
+   847→   847→                    >
+   848→   848→                      <div className="size-7 rounded-[8px] bg-hover flex items-center justify-center shrink-0">
+   849→   849→                        <Icon className="size-4 text-accent-hi" />
+   850→   850→                      </div>
+   851→   851→                      <div className="min-w-0 flex-1">
+   852→   852→                        <div className="flex items-center gap-1.5">
+   853→   853→                          <span className="text-[13px] font-medium text-foreground">
+   854→   854→                            {a.name}
+   855→   855→                          </span>
+   856→   856→                          <span className="text-[11px] text-ws-disabled">
+   857→   857→                            {a.vendor}
+   858→   858→                          </span>
+   859→   859→                        </div>
+   860→   860→                        <div className="text-[12px] text-ws-secondary line-clamp-1">
+   861→   861→                          {a.description}
+   862→   862→                        </div>
+   863→   863→                      </div>
+   864→   864→                      {selected ? (
+   865→   865→                        <Check className="size-3.5 text-accent-hi ml-auto shrink-0" />
+   866→   866→                      ) : !a.detected ? (
+   867→   867→                        <span className="ml-auto text-[10px] text-ws-disabled border border-ws-border rounded-full px-1.5 py-0.5 shrink-0">
+   868→   868→                          Not detected
+   869→   869→                        </span>
+   870→   870→                      ) : null}
+   871→   871→                    </div>
+   872→   872→                  );
+   873→   873→                })}
+   874→   874→              </PopoverContent>
+   875→   875→            </Popover>
+   876→   876→          </div>
+   877→   877→
+   878→   878→          {/* right cluster: model picker + send */}
+   879→   879→          <div className="flex items-center gap-1.5">
+   880→   880→            <ModelPicker tabId={tabId} open={modelOpen} onOpenChange={setModelOpen} />
+   881→   881→            <button
+   882→   882→              type="button"
+   883→   883→              onClick={onSendClick}
+   884→   884→              aria-label={sendLabel}
+   885→   885→              className={cn(
+   886→   886→                "inline-flex items-center justify-center size-8",
+   887→   887→                "rounded-[8px] bg-accent-fill text-white",
+   888→   888→                "hover:bg-accent-hi transition-colors focus-ring"
+   889→   889→              )}
+   890→   890→            >
+   891→   891→              <SendIcon className="size-4" />
+   892→   892→            </button>
+   893→   893→          </div>
+   894→   894→        </div>
+   895→   895→      </div>
+   896→   896→    </div>
+   897→   897→  );
+   898→   898→}
+   899→   899→

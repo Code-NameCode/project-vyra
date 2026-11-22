@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, X } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,10 +24,12 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { useAppStore } from "@/stores/useAppStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
+import { useProvidersStore } from "@/stores/useProvidersStore";
 import modelsData from "@/data/models.json";
-import type { ModelDef } from "@/lib/types";
+import type { ModelDef, Provider, ProviderType } from "@/lib/types";
 
 const MODELS = modelsData as ModelDef[];
 
@@ -58,6 +60,127 @@ function FieldRow({
   );
 }
 
+const PROVIDER_TYPE_LABEL: Record<ProviderType, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  ollama: "Ollama",
+  custom: "Custom",
+};
+
+function ProviderCard({
+  provider,
+  onRemove,
+}: {
+  provider: Provider;
+  onRemove: (p: Provider) => void;
+}) {
+  const updateProvider = useProvidersStore((s) => s.updateProvider);
+  const detectOllama = useProvidersStore((s) => s.detectOllama);
+  const detecting = useProvidersStore((s) => s.detecting);
+  const isOllama = provider.type === "ollama";
+
+  const onDetect = async () => {
+    try {
+      const models = await detectOllama(provider.baseUrl);
+      if (models.length === 0) {
+        toast.error("Ollama not reachable");
+      } else {
+        toast.success(`${models.length} Ollama model(s) detected`);
+      }
+    } catch {
+      toast.error("Ollama not reachable");
+    }
+  };
+
+  return (
+    <div className="rounded-[10px] border border-ws-border bg-card-ws p-3">
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label="Provider name"
+          value={provider.name}
+          onChange={(e) =>
+            updateProvider(provider.id, { name: e.target.value })
+          }
+          className="flex-1 h-8 bg-card-ws border-ws-border-soft text-[13px] focus-ring"
+        />
+        <span className="text-[11px] rounded-full px-1.5 py-0.5 border text-ws-secondary border-ws-border whitespace-nowrap">
+          {PROVIDER_TYPE_LABEL[provider.type]}
+        </span>
+        <Switch
+          checked={provider.enabled}
+          onCheckedChange={(v) =>
+            updateProvider(provider.id, { enabled: v })
+          }
+          aria-label="Toggle provider enabled"
+        />
+        <button
+          type="button"
+          onClick={() => onRemove(provider)}
+          aria-label={`Remove ${provider.name}`}
+          className="inline-flex items-center justify-center size-7 text-ws-secondary hover:text-red-400 hover:bg-hover rounded-[8px] focus-ring"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      </div>
+
+      <div className="mt-2 grid gap-2">
+        <FieldRow label="Base URL" htmlFor={`prov-base-${provider.id}`}>
+          <Input
+            id={`prov-base-${provider.id}`}
+            value={provider.baseUrl}
+            onChange={(e) =>
+              updateProvider(provider.id, { baseUrl: e.target.value })
+            }
+            placeholder="https://api.openai.com/v1"
+            className="h-8 bg-card-ws border-ws-border-soft text-[13px] focus-ring"
+          />
+        </FieldRow>
+
+        {isOllama ? (
+          <p className="text-[12px] text-ws-secondary px-1 py-1">
+            Ollama runs locally and needs no API key. Use the detect button
+            below to fetch available models.
+          </p>
+        ) : (
+          <FieldRow label="API key" htmlFor={`prov-key-${provider.id}`}>
+            <Input
+              id={`prov-key-${provider.id}`}
+              type="password"
+              value={provider.apiKey}
+              onChange={(e) =>
+                updateProvider(provider.id, { apiKey: e.target.value })
+              }
+              placeholder="sk-..."
+              className="h-8 bg-card-ws border-ws-border-soft text-[13px] focus-ring"
+            />
+          </FieldRow>
+        )}
+      </div>
+
+      <div className="mt-2 flex items-center justify-between">
+        <span className="text-[12px] text-ws-secondary">
+          {provider.models.length} model(s)
+        </span>
+        {isOllama ? (
+          <button
+            type="button"
+            onClick={onDetect}
+            disabled={detecting}
+            className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 focus-ring disabled:opacity-60"
+          >
+            {detecting ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3.5" />
+            )}
+            {detecting ? "Detecting..." : "Detect models"}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsModal() {
   const open = useAppStore((s) => s.settingsOpen);
   const setOpen = useAppStore((s) => s.setSettingsOpen);
@@ -78,8 +201,45 @@ export function SettingsModal() {
   const useRealApi = useSettingsStore((s) => s.useRealApi);
   const setUseRealApi = useSettingsStore((s) => s.setUseRealApi);
 
+  const providers = useProvidersStore((s) => s.providers);
+  const addProvider = useProvidersStore((s) => s.addProvider);
+  const removeProvider = useProvidersStore((s) => s.removeProvider);
+
   const [newSkill, setNewSkill] = React.useState("");
   const [tab, setTab] = React.useState("general");
+
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  const [newType, setNewType] = React.useState<ProviderType>("custom");
+  const [newBaseUrl, setNewBaseUrl] = React.useState("");
+  const [removeTarget, setRemoveTarget] = React.useState<Provider | null>(
+    null
+  );
+
+  const openAddProvider = () => {
+    setNewName("");
+    setNewType("custom");
+    setNewBaseUrl("");
+    setAddOpen(true);
+  };
+
+  const confirmAddProvider = () => {
+    const name = newName.trim();
+    if (!name) {
+      toast.error("Provider name is required");
+      return;
+    }
+    addProvider({ name, type: newType, baseUrl: newBaseUrl.trim() });
+    toast.success("Provider added");
+    setAddOpen(false);
+  };
+
+  const confirmRemove = () => {
+    if (!removeTarget) return;
+    removeProvider(removeTarget.id);
+    toast.success("Provider removed");
+    setRemoveTarget(null);
+  };
 
   const addSkillOnEnter = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
@@ -91,6 +251,7 @@ export function SettingsModal() {
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-[640px] p-0 bg-popover border border-ws-border">
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
@@ -105,6 +266,9 @@ export function SettingsModal() {
             <TabsList className="bg-card-ws border border-ws-border h-8">
               <TabsTrigger value="general" className="text-[12.5px]">
                 General
+              </TabsTrigger>
+              <TabsTrigger value="providers" className="text-[12.5px]">
+                Providers
               </TabsTrigger>
               <TabsTrigger value="models" className="text-[12.5px]">
                 Models
@@ -188,6 +352,46 @@ export function SettingsModal() {
                     </SelectContent>
                   </Select>
                 </FieldRow>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="providers" className="mt-4">
+              <div className="grid gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="grid gap-0.5">
+                    <span className="text-[14px] font-medium text-foreground">
+                      Model providers
+                    </span>
+                    <span className="text-[12px] text-ws-secondary">
+                      Configure API endpoints and keys. Ollama models are
+                      auto-detected locally.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openAddProvider}
+                    className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] border border-ws-border bg-card-ws text-[13px] hover:bg-hover focus-ring"
+                  >
+                    <Plus className="size-3.5" />
+                    Add provider
+                  </button>
+                </div>
+
+                <div className="ws-scroll max-h-[360px] overflow-y-auto flex flex-col gap-2 mt-3">
+                  {providers.length === 0 ? (
+                    <p className="text-[12.5px] text-ws-disabled">
+                      No providers configured.
+                    </p>
+                  ) : (
+                    providers.map((p) => (
+                      <ProviderCard
+                        key={p.id}
+                        provider={p}
+                        onRemove={setRemoveTarget}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
             </TabsContent>
 
@@ -300,5 +504,120 @@ export function SettingsModal() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <DialogContent className="max-w-[420px] p-0 bg-popover border border-ws-border">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
+          <DialogTitle className="text-[14px]">Add provider</DialogTitle>
+          <DialogDescription className="sr-only">
+            Add a new model provider configuration.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="px-5 py-4 grid gap-3">
+          <FieldRow label="Name" htmlFor="new-prov-name">
+            <Input
+              id="new-prov-name"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="My provider"
+              className="h-8 bg-card-ws border-ws-border text-[13px] focus-ring"
+            />
+          </FieldRow>
+          <FieldRow label="Type" htmlFor="new-prov-type">
+            <Select
+              value={newType}
+              onValueChange={(v) => setNewType(v as ProviderType)}
+            >
+              <SelectTrigger
+                id="new-prov-type"
+                className="h-8 bg-card-ws border-ws-border text-[13px] w-full focus-ring"
+              >
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-ws-border">
+                <SelectItem value="openai" className="text-[13px]">
+                  OpenAI
+                </SelectItem>
+                <SelectItem value="anthropic" className="text-[13px]">
+                  Anthropic
+                </SelectItem>
+                <SelectItem value="ollama" className="text-[13px]">
+                  Ollama
+                </SelectItem>
+                <SelectItem value="custom" className="text-[13px]">
+                  Custom
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </FieldRow>
+          <FieldRow label="Base URL" htmlFor="new-prov-url">
+            <Input
+              id="new-prov-url"
+              value={newBaseUrl}
+              onChange={(e) => setNewBaseUrl(e.target.value)}
+              placeholder="https://api.openai.com/v1"
+              className="h-8 bg-card-ws border-ws-border text-[13px] focus-ring"
+            />
+          </FieldRow>
+        </div>
+        <DialogFooter className="px-5 py-3 border-t border-ws-border">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setAddOpen(false)}
+            className="bg-card-ws border-ws-border text-ws-secondary hover:text-foreground"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={confirmAddProvider}
+            className="bg-accent-fill text-white hover:bg-accent-hi"
+          >
+            Add
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog
+      open={removeTarget !== null}
+      onOpenChange={(o) => {
+        if (!o) setRemoveTarget(null);
+      }}
+    >
+      <DialogContent className="max-w-[380px] p-0 bg-popover border border-ws-border">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
+          <DialogTitle className="text-[14px]">Remove provider</DialogTitle>
+          <DialogDescription>
+            {removeTarget
+              ? `Remove "${removeTarget.name}"? This will delete the provider and its model list.`
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="px-5 py-3 border-t border-ws-border">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setRemoveTarget(null)}
+            className="bg-card-ws border-ws-border text-ws-secondary hover:text-foreground"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={confirmRemove}
+            className="bg-destructive text-white hover:opacity-90"
+          >
+            Remove
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

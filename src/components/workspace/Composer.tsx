@@ -17,9 +17,11 @@ import {
   FileText,
   FlaskConical,
   Folder,
+  FolderPlus,
   Hammer,
   Map,
   Mic,
+  Minus,
   Paperclip,
   Plus,
   Rocket,
@@ -210,6 +212,9 @@ export function Composer({ tabId }: { tabId: string }) {
     (s) => s.tabs.find((t) => t.id === tabId)?.projectId
   );
   const projects = useProjectsStore((s) => s.projects);
+  const setTabProject = useAppStore((s) => s.setTabProject);
+  const addProject = useProjectsStore((s) => s.addProject);
+  const activeProject = projects.find((p) => p.id === projectId);
   const convFiles = useChatStore(
     (s) => s.conversations[tabId]?.workspace.files
   );
@@ -633,6 +638,95 @@ export function Composer({ tabId }: { tabId: string }) {
           "focus-within:border-accent-fill/50"
         )}
       >
+        {/* project selector bar (top of composer) */}
+        <div className="flex items-center gap-1.5 mb-2 ws-fade-in">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Select project"
+                className={cn(
+                  "inline-flex items-center gap-1.5 h-7 px-2 rounded-[8px]",
+                  "border border-ws-border-soft bg-hover text-[12px] text-foreground",
+                  "hover:bg-hover focus-ring max-w-[200px]",
+                  "transition-colors duration-150"
+                )}
+              >
+                <Folder
+                  className={cn(
+                    "size-[13px] shrink-0",
+                    projectId ? "text-accent-hi" : "text-ws-secondary"
+                  )}
+                />
+                <span
+                  className={cn(
+                    "truncate",
+                    !activeProject && "text-ws-secondary"
+                  )}
+                >
+                  {activeProject ? activeProject.name : "No project"}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "size-3 shrink-0 text-ws-secondary"
+                  )}
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              sideOffset={6}
+              className={cn(
+                "min-w-[220px] p-1 rounded-[10px]",
+                "border border-ws-border bg-popover"
+              )}
+            >
+              <DropdownMenuItem
+                onSelect={() => setTabProject(tabId, undefined)}
+                className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+              >
+                <Minus className="size-[13px] text-ws-secondary" />
+                <span className="flex-1 truncate">No project</span>
+                {!projectId && (
+                  <Check className="size-3.5 text-accent-hi shrink-0" />
+                )}
+              </DropdownMenuItem>
+              <div className="h-px bg-ws-border my-1" />
+              {projects.map((p) => {
+                const selected = p.id === projectId;
+                return (
+                  <DropdownMenuItem
+                    key={p.id}
+                    onSelect={() => setTabProject(tabId, p.id, p.name)}
+                    className="text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover"
+                  >
+                    <Folder className="size-[13px] text-accent-hi" />
+                    <span className="flex-1 truncate">{p.name}</span>
+                    {selected && (
+                      <Check className="size-3.5 text-accent-hi shrink-0" />
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+              <div className="h-px bg-ws-border my-1" />
+              <DropdownMenuItem
+                onSelect={() => {
+                  const id = addProject("New project");
+                  setTabProject(tabId, id, "New project");
+                  toast.success("Project linked");
+                }}
+                className={cn(
+                  "text-[13px] rounded-[8px] px-2.5 py-2 focus:bg-hover",
+                  "text-accent-hi"
+                )}
+              >
+                <FolderPlus className="size-[13px]" />
+                <span className="flex-1 truncate">New project</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
         {/* skills chip row (above the textarea, only when skills exist) */}
         {skills.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2 ws-fade-in">

@@ -15,6 +15,7 @@ import type {
 import { useAppStore } from "./useAppStore";
 import { useSettingsStore } from "./useSettingsStore";
 import { useProjectsStore } from "./useProjectsStore";
+import { useProvidersStore, parseModelId } from "./useProvidersStore";
 
 function emptyWorkspace(): Workspace {
   return {
@@ -294,6 +295,29 @@ export const useChatStore = create<ChatState>()(
       : "";
     const buildMode = conv?.buildMode ?? "build";
 
+    // resolve the provider from the model id (provider-prefixed models use
+    // that provider's baseUrl/apiKey + real API; simulated models use settings)
+    const providersState = useProvidersStore.getState();
+    const parsed = parseModelId(modelId);
+    let reqApiKey = settings.apiKey;
+    let reqBaseUrl = settings.baseUrl;
+    let reqUseRealApi = settings.useRealApi;
+    let reqModel: string = modelId;
+    let providerType: string | undefined;
+    if (parsed) {
+      const provider = providersState.providers.find(
+        (p) => p.id === parsed.providerId
+      );
+      if (provider && provider.enabled) {
+        reqApiKey = provider.apiKey;
+        reqBaseUrl = provider.baseUrl;
+        reqModel = parsed.modelName;
+        providerType = provider.type;
+        // ollama needs no key; treat any provider with a configured model as real
+        reqUseRealApi = provider.type === "ollama" ? true : !!provider.apiKey;
+      }
+    }
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -302,11 +326,13 @@ export const useChatStore = create<ChatState>()(
         body: JSON.stringify({
           mode: useAppStore.getState().mode,
           buildMode,
-          model: modelId,
+          model: reqModel,
+          providerType,
+          providerId: parsed?.providerId,
           messages: [...history, { role: "user", content: trimmed }],
-          apiKey: settings.apiKey,
-          baseUrl: settings.baseUrl,
-          useRealApi: settings.useRealApi,
+          apiKey: reqApiKey,
+          baseUrl: reqBaseUrl,
+          useRealApi: reqUseRealApi,
           agentInstructions: settings.agentInstructions,
           projectRules,
           skills: conv?.skills ?? [],

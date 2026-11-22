@@ -118,6 +118,23 @@ export interface AgentDef {
   vendor: string;
 }
 
+export type ProviderType = "openai" | "anthropic" | "ollama" | "custom";
+
+export interface ProviderModel {
+  id: string; // unified id: `${providerId}:${modelName}`
+  name: string; // display name
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  type: ProviderType;
+  baseUrl: string;
+  apiKey: string;
+  enabled: boolean;
+  models: ProviderModel[];
+}
+
 export interface Project {
   id: string;
   name: string;

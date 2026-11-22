@@ -203,7 +203,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
 
   return (
     <div className="w-full">
-      {isStreaming && empty ? (
+      {isStreaming && empty && !message.thinking ? (
         <div
           className="flex items-center gap-1.5 text-[13px] text-ws-secondary"
           aria-label="Thinking"
@@ -226,7 +226,22 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
         </div>
       ) : (
         <>
+          {message.thinking && (
+            <details className="mb-1.5 rounded-[10px] border border-ws-border-soft bg-card-ws px-3 py-2 text-[12.5px] text-ws-secondary ws-fade-in">
+              <summary className="cursor-pointer select-none">Thinking</summary>
+              <div className="mt-1.5 whitespace-pre-wrap italic leading-relaxed">
+                {message.thinking}
+              </div>
+            </details>
+          )}
           <MarkdownRenderer content={message.content} streaming={isStreaming} />
+          {message.usage && (message.usage.inputTokens || message.usage.outputTokens) ? (
+            <div className="mt-1 text-[11px] text-ws-secondary">
+              {message.usage.inputTokens ? `${message.usage.inputTokens} in` : ""}
+              {message.usage.inputTokens && message.usage.outputTokens ? " · " : ""}
+              {message.usage.outputTokens ? `${message.usage.outputTokens} out` : ""}
+            </div>
+          ) : null}
           {message.attachments && message.attachments.length > 0 && (
             <Attachments items={message.attachments} />
           )}

@@ -46,6 +46,8 @@ export interface ChatMessage {
   content: string;
   createdAt: number;
   streaming?: boolean;
+  thinking?: string;
+  usage?: { inputTokens?: number; outputTokens?: number };
   attachments?: FileAttachment[];
 }
 
@@ -215,6 +217,8 @@ export type StreamEvent =
   | { type: "step_start"; id: string; title: string; kind: AgentStep["kind"] }
   | { type: "step_done"; id: string; durationMs: number }
   | { type: "token"; text: string }
+  | { type: "thinking"; text: string }
+  | { type: "usage"; inputTokens?: number; outputTokens?: number }
   | { type: "file"; path: string; action: "create" | "modify"; language: string; content: string }
   | { type: "terminal"; command: string; output: string }
   | { type: "change"; path: string; status: FileChange["status"]; additions: number; deletions: number; diff: string }
@@ -248,6 +252,8 @@ export type AgentEvent = (
   | { type: "execution_started"; execution: Execution }
   | { type: "status_changed"; status: ExecutionStatus; stage: string }
   | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
+  | { type: "usage"; inputTokens?: number; outputTokens?: number }
   | { type: "tool_call_requested"; tool: string; input: Record<string, unknown> }
   | { type: "approval_required"; approval: unknown }
   | { type: "approval_received"; approvalId: string; status: string }

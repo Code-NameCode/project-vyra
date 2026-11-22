@@ -15,7 +15,7 @@ bun run build                    # must keep emitting .next/standalone/server.js
 
 ## Invariants — do not break these
 
-1. **SSE event contracts.** Plain chat: `/api/chat` emits `{type:"token"|"done"|"error"}`; client parser is `readSSE()` in `src/lib/streaming.ts`. Executions: `GET /api/executions/[id]/events` emits `id: <sequence>` lines; client dedupes by id. Changing either breaks streaming.
+1. **SSE event contracts.** Both chat transports stream through the shared `streamProvider()` in `src/lib/server/providers.ts`. Plain chat: `/api/chat` emits `{type:"token"|"thinking"|"usage"|"done"|"error"}` (upstream connection/auth failures return JSON 502 `UPSTREAM_<status>` before any SSE starts); client parser is `readSSE()` in `src/lib/streaming.ts`. Executions: `GET /api/executions/[id]/events` emits persisted `id: <sequence>` lines (`text`/`thinking`/`usage`/tool/approval events); client dedupes by id. Changing either breaks streaming.
 2. **Approval gate.** Non-read tools (`src/lib/agent/tools.ts`) must go through `src/lib/security/approvals.ts` — action+input+executionId hash-match, 10-min TTL. Never bypass it for "read" reclassification.
 3. **Workspace confinement.** Every filesystem path from user/DB data goes through `assertWorkspacePath`/`resolveWorkspacePath` (`src/lib/security/workspace.ts`). Keep the realpath containment checks.
 4. **Standalone output.** `next.config.ts` keeps `output: "standalone"` and `serverExternalPackages: ["@lydell/node-pty"]`. The deploy scaffold depends on both.

@@ -7,9 +7,16 @@ export interface ProviderTool { name: string; description: string; inputSchema: 
 export interface ProviderCapabilities { streaming: boolean; toolCalling: boolean; vision: boolean; structuredOutput: boolean; contextWindow?: number; }
 export type ProviderEvent =
   | { type: "text"; text: string }
+  | { type: "thinking"; text: string }
   | { type: "tool_call"; id: string; name: string; arguments: string }
   | { type: "usage"; inputTokens?: number; outputTokens?: number }
   | { type: "error"; message: string };
+
+/** Z.ai GLM Coding Plan requires thinking enabled for GLM-5.3 models. */
+export function isZaiCodingEndpoint(baseUrl: string): boolean {
+  const s = baseUrl.toLowerCase();
+  return s.includes("z.ai") || s.includes("glm");
+}
 
 export async function resolveProviderKey(config: ProviderConfig): Promise<string | undefined> {
   if (config.type === "ollama") return undefined;
@@ -35,11 +42,18 @@ export async function* streamProvider(config: ProviderConfig, messages: Provider
   if (config.type === "anthropic") {
     url = `${base}/messages`;
     headers = { "Content-Type": "application/json", "anthropic-version": "2023-06-01", ...(key ? { "x-api-key": key } : {}) };
-    body = { model: config.model, max_tokens: 4096, stream: true, messages: messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role === "tool" ? "user" : m.role, content: m.content })), system: messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n"), tools: caps.toolCalling ? tools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema })) : undefined };
+    body = { model: config.model, max_tokens: 4096, stream: true, messages: messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role === "tool" ? "user" : m.role, content: m.content })), system: messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n"), tools: caps.toolCalling && tools.length > 0 ? tools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema })) : undefined };
   } else {
     url = `${base}${config.type === "ollama" ? "/v1/chat/completions" : "/chat/completions"}`;
     headers = { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) };
-    body = { model: config.model, stream: true, messages, tools: caps.toolCalling ? tools.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })) : undefined, tool_choice: caps.toolCalling ? "auto" : undefined };
+    body = {
+      model: config.model,
+      stream: true,
+      messages,
+      tools: caps.toolCalling && tools.length > 0 ? tools.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })) : undefined,
+      tool_choice: caps.toolCalling && tools.length > 0 ? "auto" : undefined,
+      ...(isZaiCodingEndpoint(base) ? { temperature: 1.0, thinking: { type: "enabled" }, reasoning_effort: "max" } : {}),
+    };
   }
   const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal });
   if (!response.ok || !response.body) {
@@ -51,6 +65,9 @@ export async function* streamProvider(config: ProviderConfig, messages: Provider
   const decoder = new TextDecoder();
   let buffer = "";
   const toolBuffers = new Map<string, { name: string; args: string }>();
+  // Continuation chunks for a tool call omit the id and carry only the
+  // streaming index, so remember which id each index maps to.
+  const toolIdsByIndex = new Map<number, string>();
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -64,6 +81,7 @@ export async function* streamProvider(config: ProviderConfig, messages: Provider
         try { json = JSON.parse(payload); } catch { continue; }
         if (config.type === "anthropic") {
           if (json.type === "content_block_delta" && json.delta?.text) yield { type: "text", text: json.delta.text };
+          if (json.type === "content_block_delta" && json.delta?.type === "thinking_delta" && json.delta?.thinking) yield { type: "thinking", text: json.delta.thinking };
           if (json.type === "content_block_start" && json.content_block?.type === "tool_use") toolBuffers.set(json.content_block.id, { name: json.content_block.name, args: "" });
           if (json.type === "content_block_delta" && json.delta?.partial_json) {
             const id = [...toolBuffers.keys()].at(-1); if (id) toolBuffers.get(id)!.args += json.delta.partial_json;
@@ -73,9 +91,19 @@ export async function* streamProvider(config: ProviderConfig, messages: Provider
           const choice = json.choices?.[0];
           const delta = choice?.delta;
           if (delta?.content) yield { type: "text", text: delta.content };
+          // Reasoning deltas (GLM/DeepSeek `reasoning_content`, OpenRouter `reasoning`).
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning;
+          if (typeof reasoning === "string" && reasoning) yield { type: "thinking", text: reasoning };
           for (const call of delta?.tool_calls || []) {
-            const current = toolBuffers.get(call.id) || { name: call.function?.name || "", args: "" };
-            current.name ||= call.function?.name || ""; current.args += call.function?.arguments || ""; toolBuffers.set(call.id, current);
+            const id = call.id
+              || (call.index !== undefined ? toolIdsByIndex.get(call.index) : undefined)
+              || [...toolBuffers.keys()].at(-1)
+              || "";
+            if (call.id && call.index !== undefined) toolIdsByIndex.set(call.index, call.id);
+            const current = toolBuffers.get(id) || { name: call.function?.name || "", args: "" };
+            current.name ||= call.function?.name || "";
+            current.args += call.function?.arguments || "";
+            if (id) toolBuffers.set(id, current);
           }
           if (json.usage) yield { type: "usage", inputTokens: json.usage.prompt_tokens, outputTokens: json.usage.completion_tokens };
         }

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import { getCredential } from "@/lib/server/credential-vault";
+import { streamProvider, type ProviderConfig, type ProviderEvent, type ProviderKind, type ProviderMessage } from "@/lib/server/providers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +19,6 @@ interface ChatRequestBody {
   providerType?: string;
   providerId?: string;
   messages: InMessage[];
-  apiKey?: string;
   baseUrl?: string;
   useRealApi?: boolean;
   agentInstructions?: string;
@@ -84,51 +84,37 @@ async function readSkillsFolder(folder?: string): Promise<SkillFile[]> {
   }
 }
 
-const AGENT_NAMES: Record<string, string> = {
-  codex: "Codex",
-  cline: "Cline",
-  opencode: "OpenCode",
-  kilocode: "KiloCode",
-  pi: "Pi",
-  zcode: "ZCode",
-  hermes: "Hermes",
-  omipy: "OmiPy",
-};
-
-function buildContextLine(agentId?: string, skills?: string[]): string {
-  const parts: string[] = [];
-  if (agentId) {
-    const name = AGENT_NAMES[agentId] ?? agentId;
-    parts.push(`Running with **${name}**`);
-  }
-  if (skills && skills.length) {
-    parts.push(`skills: ${skills.map((s) => `\`/${s}\``).join(", ")}`);
-  }
-  return parts.length ? `_${parts.join(" · ")}_` : "";
-}
+const encoder = new TextEncoder();
 
 function encodeSSE(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
 
-/** Z.ai GLM Coding Plan requires thinking enabled for GLM-5.3 models. */
-function isZaiCodingEndpoint(baseUrl: string): boolean {
-  const s = baseUrl.toLowerCase();
-  return s.includes("z.ai") || s.includes("glm");
+/** Map a shared ProviderEvent onto the /api/chat SSE contract. */
+function mapEvent(event: ProviderEvent): string | null {
+  switch (event.type) {
+    case "text":
+      return encodeSSE({ type: "token", text: event.text });
+    case "thinking":
+      return encodeSSE({ type: "thinking", text: event.text });
+    case "usage":
+      return encodeSSE({ type: "usage", inputTokens: event.inputTokens, outputTokens: event.outputTokens });
+    // Native tool calls are parsed by the shared layer for parity across
+    // transports, but plain chat never executes tools — that is the
+    // execution transport's job.
+    case "tool_call":
+      return null;
+    case "error":
+      return encodeSSE({ type: "error", code: "STREAM_ERROR", message: "Stream interrupted." });
+  }
 }
-
-const encoder = new TextEncoder();
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as ChatRequestBody;
-  const mode = body.mode ?? "code";
   const messages = body.messages ?? [];
   const signal = req.signal;
 
   const skillFiles = await readSkillsFolder(body.skillsFolderPath);
-  const skillNames = Array.from(
-    new Set([...(body.skills ?? []), ...skillFiles.map((s) => s.name)])
-  );
 
   const providerType = body.providerType;
   let serverApiKey: string | null = null;
@@ -186,74 +172,36 @@ export async function POST(req: NextRequest) {
         : undefined,
     ].filter(Boolean) as string[];
 
-    const base = (body.baseUrl || "").replace(/\/$/, "");
-    let upstreamUrl: string;
-    let headers: Record<string, string>;
-    let reqBody: string;
+    const kind = (providerType ?? "custom") as ProviderKind;
+    const config: ProviderConfig = {
+      // The key is resolved from the server-side vault above and handed to the
+      // shared layer directly; client-supplied keys are never accepted here.
+      type: kind,
+      baseUrl: body.baseUrl || "",
+      model: body.model || (kind === "anthropic" ? "claude-3-5-sonnet-latest" : "gpt-4o-mini"),
+      apiKey: serverApiKey ?? undefined,
+    };
+    const providerMessages: ProviderMessage[] = [
+      ...systemParts.map((content) => ({ role: "system" as const, content })),
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ];
 
-    if (providerType === "anthropic") {
-      upstreamUrl = `${base}/messages`;
-      headers = {
-        "Content-Type": "application/json",
-        "x-api-key": serverApiKey || "",
-        "anthropic-version": "2023-06-01",
-      };
-      reqBody = JSON.stringify({
-        model: body.model ?? "claude-3-5-sonnet-latest",
-        max_tokens: 2048,
-        stream: true,
-        system: systemParts.join("\n\n"),
-        messages: messages.map((m) => ({
-          role: m.role === "system" ? "user" : m.role,
-          content: m.content,
-        })),
-      });
-    } else {
-      const chatPath =
-        providerType === "ollama" ? "/v1/chat/completions" : "/chat/completions";
-      upstreamUrl = `${base}${chatPath}`;
-      headers = {
-        "Content-Type": "application/json",
-        ...(serverApiKey ? { Authorization: `Bearer ${serverApiKey}` } : {}),
-      };
-      reqBody = JSON.stringify({
-        model: body.model ?? "gpt-4o-mini",
-        stream: true,
-        messages: [
-          ...systemParts.map((content) => ({ role: "system", content })),
-          ...messages,
-        ],
-        ...(isZaiCodingEndpoint(base)
-          ? {
-              temperature: 1.0,
-              thinking: { type: "enabled" },
-              reasoning_effort: "max",
-            }
-          : {}),
-      });
-    }
+    // Plain chat sends no tools (the execution transport owns tool execution),
+    // but thinking, usage, and stray native tool-call deltas are parsed by the
+    // shared layer exactly as the execution path sees them.
+    const iterator = streamProvider(config, providerMessages, [], signal);
 
-    const upstream = await fetch(upstreamUrl, {
-      method: "POST",
-      headers,
-      body: reqBody,
-      signal,
-    });
-
-    if (!upstream.ok || !upstream.body) {
-      let detail = "";
-      try {
-        detail = await upstream.text();
-      } catch {
-        detail = "";
-      }
+    // Pull the first event before responding: streamProvider is lazy, so this
+    // is when the upstream fetch happens. Connection/auth failures keep the
+    // historical JSON 502 contract instead of a 200 SSE stream that errors.
+    const first = await iterator.next();
+    if (!first.done && first.value.type === "error") {
+      const status = Number((/^Provider returned (\d+)/.exec(first.value.message) || [])[1] || 0) || 502;
       return new Response(
         JSON.stringify({
           error: {
-            code: `UPSTREAM_${upstream.status}`,
-            message: `Provider returned ${upstream.status} ${upstream.statusText}${
-              detail ? `: ${detail.slice(0, 300)}` : ""
-            }`,
+            code: `UPSTREAM_${status}`,
+            message: first.value.message,
           },
         }),
         { status: 502, headers: { "Content-Type": "application/json" } }
@@ -262,55 +210,23 @@ export async function POST(req: NextRequest) {
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const reader = upstream.body!.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
+        const write = (chunk: string) => controller.enqueue(encoder.encode(chunk));
         try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-            let idx: number;
-            while ((idx = buf.indexOf("\n")) !== -1) {
-              const line = buf.slice(0, idx).trim();
-              buf = buf.slice(idx + 1);
-              if (!line.startsWith("data:")) continue;
-              const payload = line.slice(5).trim();
-              if (payload === "[DONE]") continue;
-              try {
-                const json = JSON.parse(payload) as
-                  | { choices?: { delta?: { content?: string } }[] }
-                  | { type?: string; delta?: { text?: string } };
-                let token: string | undefined;
-                if (providerType === "anthropic") {
-                  const a = json as { type?: string; delta?: { text?: string } };
-                  token =
-                    a.type === "content_block_delta" ? a.delta?.text : undefined;
-                } else {
-                  const o = json as { choices?: { delta?: { content?: string } }[] };
-                  token = o.choices?.[0]?.delta?.content;
-                }
-                if (token) {
-                  controller.enqueue(encoder.encode(encodeSSE({ type: "token", text: token })));
-                }
-              } catch {
-                /* ignore malformed lines */
-              }
+          if (!first.done) {
+            const mapped = mapEvent(first.value);
+            if (mapped) write(mapped);
+            for await (const event of iterator) {
+              const mapped = mapEvent(event);
+              if (mapped) write(mapped);
             }
           }
-          controller.enqueue(encoder.encode(encodeSSE({ type: "done" })));
+          write(encodeSSE({ type: "done" }));
         } catch (e) {
+          // Client disconnects abort the upstream fetch; swallow those like a
+          // normal disconnect instead of reporting a stream error.
           if (!(e instanceof DOMException && e.name === "AbortError")) {
-            controller.enqueue(
-              encoder.encode(
-                encodeSSE({
-                  type: "error",
-                  code: "STREAM_ERROR",
-                  message: "Stream interrupted.",
-                })
-              )
-            );
-            controller.enqueue(encoder.encode(encodeSSE({ type: "done" })));
+            write(encodeSSE({ type: "error", code: "STREAM_ERROR", message: "Stream interrupted." }));
+            write(encodeSSE({ type: "done" }));
           }
         } finally {
           controller.close();

@@ -38,9 +38,9 @@ Configure a provider in **Settings** (API keys are stored in an encrypted local 
 
 **Client.** `src/app/page.tsx` is an IDE shell (top bar, icon rail, sidebar, chat view, resizable right panel, command palette). State lives in 7 Zustand stores; `src/stores/useChatStore.ts` is the core: per-tab conversations, optimistic messages, streaming consumption, persistence to localStorage + server.
 
-**Two chat transports** (both consume app-defined SSE via `src/lib/streaming.ts`):
-1. **Plain chat**: `POST /api/chat` proxies to the provider and streams normalized `{type:"token"|"done"|"error"}` events.
-2. **Agent executions**: `POST /api/executions` starts a background loop (`src/lib/agent/execution-manager.ts`) that streams persisted, sequence-numbered events over `GET /api/executions/[id]/events` (cursor replay supported), runs tools from `TOOL_REGISTRY`, and pauses for approvals.
+**Two chat transports, one provider layer.** Both stream through the shared `streamProvider()` in `src/lib/server/providers.ts` (OpenAI-compatible incl. Ollama, Anthropic; thinking deltas, tool-call reassembly, and usage events parsed identically; Z.ai/GLM thinking params applied in both):
+1. **Plain chat**: `POST /api/chat` maps shared events to `{type:"token"|"thinking"|"usage"|"done"|"error"}` SSE (upstream connection/auth failures return JSON 502 `UPSTREAM_<status>`). No tools are executed here.
+2. **Agent executions**: `POST /api/executions` starts a background loop (`src/lib/agent/execution-manager.ts`) that streams persisted, sequence-numbered events over `GET /api/executions/[id]/events` (cursor replay supported), executes tools from `TOOL_REGISTRY`, and pauses for approvals.
 
 **Safety rails.** Non-read tool actions require an approval (`src/lib/security/approvals.ts`, hash-matched, 10-min TTL). All filesystem operations are confined to the workspace root (`src/lib/security/workspace.ts`: resolve + containment + symlink checks). File writes go through `src/lib/server/file-transactions.ts` (atomic write, hash-guarded optimistic concurrency, snapshots + diffs + rollback endpoint). On startup, `src/instrumentation.ts` marks executions orphaned by a restart as `interrupted` (the runtime is in-memory).
 

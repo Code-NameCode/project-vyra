@@ -440,8 +440,10 @@ export const useChatStore = create<ChatState>()(
         if (!created.execution?.id) throw new Error("Execution did not return an id");
         const eventRes = await fetch(`/api/executions/${encodeURIComponent(created.execution.id)}/events`, { signal: controller.signal });
         await readSSE(eventRes, (event) => {
-          const evt = event as unknown as { type: string; text?: string; tool?: string; error?: string; approval?: unknown; summary?: unknown };
+          const evt = event as unknown as { type: string; text?: string; tool?: string; error?: string; approval?: unknown; summary?: unknown; inputTokens?: number; outputTokens?: number };
           if (evt.type === "text") apply((c) => ({ ...c, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + (evt.text || "") } : m) }));
+          else if (evt.type === "thinking") apply((c) => ({ ...c, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, thinking: (m.thinking || "") + (evt.text || "") } : m) }));
+          else if (evt.type === "usage") apply((c) => ({ ...c, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, usage: { inputTokens: evt.inputTokens, outputTokens: evt.outputTokens } } : m) }));
           else if (evt.type === "tool_started") apply((c) => ({ ...c, steps: [...c.steps, { id: uid("step"), title: evt.tool || "Tool", kind: "run", status: "running", detail: "Executing tool", startedAt: Date.now() }] }));
           else if (evt.type === "approval_required") apply((c) => ({ ...c, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, content: `${m.content}\n\n_Approval required for a restricted action._` } : m) }));
           else if (evt.type === "failed") apply((c) => ({ ...c, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, content: `${m.content}\n\n**Execution failed**\n\n${evt.error || "Unknown error"}` } : m) }));
@@ -533,6 +535,28 @@ export const useChatStore = create<ChatState>()(
               messages: c.messages.map((m) =>
                 m.id === assistantMsg.id
                   ? { ...m, content: m.content + evt.text }
+                  : m
+              ),
+            }));
+            break;
+          }
+          case "thinking": {
+            apply((c) => ({
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === assistantMsg.id
+                  ? { ...m, thinking: (m.thinking || "") + evt.text }
+                  : m
+              ),
+            }));
+            break;
+          }
+          case "usage": {
+            apply((c) => ({
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === assistantMsg.id
+                  ? { ...m, usage: { inputTokens: evt.inputTokens, outputTokens: evt.outputTokens } }
                   : m
               ),
             }));

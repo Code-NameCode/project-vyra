@@ -49,6 +49,8 @@ async function runExecution(runtime: RuntimeExecution, execution: Execution) {
       for await (const event of streamProvider(runtime.config, runtime.messages, providerTools())) {
         if (runtime.cancelled) return cancel(runtime);
         if (event.type === "text") { text += event.text; await emit(runtime, { type: "text", text: event.text }); }
+        if (event.type === "thinking") await emit(runtime, { type: "thinking", text: event.text });
+        if (event.type === "usage") await emit(runtime, { type: "usage", inputTokens: event.inputTokens, outputTokens: event.outputTokens });
         if (event.type === "tool_call") { let input: Record<string, unknown>; try { input = JSON.parse(event.arguments || "{}"); } catch { throw new Error(`Invalid tool arguments for ${event.name}`); } calls.push({ tool: event.name, input, approvalId: undefined }); }
         if (event.type === "error") throw new Error(event.message);
       }

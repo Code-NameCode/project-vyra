@@ -101,7 +101,7 @@ function DetailHeader({
   };
 
   return (
-    <div className="shrink-0 border-b border-ws-border px-5 py-3 flex items-center gap-3">
+    <div className="shrink-0 border-b border-ws-border px-4 min-[640px]:px-5 py-3 flex flex-col min-[640px]:flex-row items-start min-[640px]:items-center gap-3 min-[640px]:gap-3">
       {editing ? (
         <Input
           ref={inputRef}
@@ -118,20 +118,20 @@ function DetailHeader({
             }
           }}
           aria-label="Project name"
-          className="bg-card-ws border border-ws-border h-8 text-[15px] w-[280px] focus-ring"
+          className="bg-card-ws border border-ws-border h-8 text-[15px] w-full min-[640px]:w-[280px] focus-ring"
         />
       ) : (
         <button
           type="button"
           onClick={beginEdit}
           title="Rename project"
-          className="text-[15px] font-medium text-foreground rounded-[6px] px-1.5 py-1 -ml-1.5 hover:bg-hover focus-ring transition-colors duration-150 truncate max-w-[360px]"
+          className="text-[15px] font-medium text-foreground rounded-[6px] px-1.5 py-1 -ml-1.5 hover:bg-hover focus-ring transition-colors duration-150 truncate max-w-full min-[640px]:max-w-[360px]"
         >
           {project.name}
         </button>
       )}
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="flex items-center gap-2 w-full min-[640px]:w-auto min-[640px]:ml-auto min-[640px]:justify-end">
         <button
           type="button"
           onClick={() => openProject(project.id, project.name)}
@@ -206,8 +206,8 @@ function FilesTab({ project }: { project: Project }) {
   }
 
   return (
-    <div className="flex flex-1 min-h-0">
-      <div className="w-[200px] shrink-0 border-r border-ws-border overflow-y-auto ws-scroll p-2">
+    <div className="flex flex-col min-[640px]:flex-row flex-1 min-h-0">
+      <div className="w-full min-[640px]:w-[200px] shrink-0 max-h-[35vh] min-[640px]:max-h-none border-b min-[640px]:border-b-0 min-[640px]:border-r border-ws-border overflow-y-auto ws-scroll p-2">
         <FileTree
           files={files}
           selectedPath={currentPath}
@@ -343,15 +343,17 @@ export function ProjectsPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <header className="shrink-0 border-b border-ws-border px-6 py-4 flex items-center gap-3">
-        <h1 className="text-[20px] font-semibold text-foreground">Projects</h1>
-        <span className="text-[13px] text-ws-secondary">
-          {projects.length} project{projects.length === 1 ? "" : "s"}
-        </span>
+      <header className="shrink-0 border-b border-ws-border px-4 min-[640px]:px-6 py-4 flex flex-col min-[640px]:flex-row items-start min-[640px]:items-center gap-3 min-[640px]:gap-3">
+        <div className="flex items-center gap-3 min-[640px]:gap-3">
+          <h1 className="text-[20px] font-semibold text-foreground">Projects</h1>
+          <span className="text-[13px] text-ws-secondary">
+            {projects.length} project{projects.length === 1 ? "" : "s"}
+          </span>
+        </div>
         <button
           type="button"
           onClick={handleNew}
-          className="ml-auto inline-flex items-center gap-2 h-9 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 focus-ring transition-opacity duration-150"
+          className="min-[640px]:ml-auto inline-flex items-center gap-2 h-9 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 focus-ring transition-opacity duration-150"
         >
           <Plus className="size-4" />
           New project
@@ -359,8 +361,8 @@ export function ProjectsPage() {
       </header>
 
       {/* Body: left list + right detail */}
-      <div className="flex flex-1 min-h-0">
-        <div className="w-[260px] shrink-0 border-r border-ws-border overflow-y-auto ws-scroll p-2">
+      <div className="flex flex-col min-[768px]:flex-row flex-1 min-h-0">
+        <div className="w-full min-[768px]:w-[260px] shrink-0 max-h-[35vh] min-[768px]:max-h-none border-b min-[768px]:border-b-0 min-[768px]:border-r border-ws-border overflow-y-auto ws-scroll p-2">
           {projects.length === 0 ? (
             <div className="flex h-full items-center justify-center px-3 text-center">
               <p className="text-[13px] text-ws-secondary">

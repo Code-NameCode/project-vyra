@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, Loader2, Search } from "lucide-react";
+import { Check, ChevronDown, Cpu, Loader2, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -164,13 +164,14 @@ export function ModelPicker({
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[8px]",
+            "inline-flex items-center gap-1.5 h-7 px-2.5 max-[639px]:px-2 rounded-[8px]",
             "border border-ws-border bg-card-ws text-[13px]",
             valid ? "text-foreground" : "text-ws-secondary",
             "hover:bg-hover transition-colors focus-ring max-w-[200px]"
           )}
         >
-          <span className="truncate">{displayName || "Select model"}</span>
+          <span className="truncate hidden min-[640px]:inline">{displayName || "Select model"}</span>
+          <Cpu className="size-3.5 text-ws-secondary shrink-0 min-[640px]:hidden" aria-hidden />
           <ChevronDown className="size-3.5 text-ws-secondary shrink-0" />
         </button>
       </PopoverTrigger>
@@ -182,7 +183,7 @@ export function ModelPicker({
           searchRef.current?.focus();
         }}
         className={cn(
-          "w-[300px] p-1 rounded-[10px]",
+          "w-[280px] max-w-[calc(100vw-2rem)] p-1 rounded-[10px]",
           "bg-popover border border-ws-border"
         )}
       >

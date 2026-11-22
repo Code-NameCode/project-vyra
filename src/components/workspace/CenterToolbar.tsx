@@ -39,14 +39,14 @@ function ToolButton({
           aria-label={label}
           aria-pressed={active}
           className={cn(
-            "size-9 rounded-[8px] flex items-center justify-center transition-colors duration-150 focus-ring",
+            "size-9 max-[639px]:size-8 rounded-[8px] flex items-center justify-center transition-colors duration-150 focus-ring",
             "text-ws-secondary hover:bg-hover hover:text-foreground",
             active && "border border-ws-border bg-hover text-foreground",
             disabled &&
               "text-ws-disabled hover:bg-transparent hover:text-ws-disabled cursor-not-allowed"
           )}
         >
-          <Icon className="size-[18px]" />
+          <Icon className="size-[18px] max-[639px]:size-[15px]" />
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{tooltipText}</TooltipContent>

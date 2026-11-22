@@ -83,31 +83,33 @@ export function SessionsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-ws-border px-6 py-4 flex items-center gap-4">
-        <h1 className="text-[20px] font-semibold text-foreground">Sessions</h1>
-        <span className="text-[13px] text-ws-secondary">
-          {totalCount} session{totalCount === 1 ? "" : "s"}
-        </span>
-        <div className="ml-auto flex items-center gap-3">
+      <header className="shrink-0 border-b border-ws-border px-4 min-[640px]:px-6 py-4 flex flex-col min-[640px]:flex-row items-start min-[640px]:items-center gap-3 min-[640px]:gap-4">
+        <div className="flex items-center gap-3 min-[640px]:gap-4">
+          <h1 className="text-[20px] font-semibold text-foreground">Sessions</h1>
+          <span className="text-[13px] text-ws-secondary">
+            {totalCount} session{totalCount === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 w-full min-[640px]:w-auto min-[640px]:ml-auto">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search sessions"
             aria-label="Search sessions"
-            className="bg-card-ws border border-ws-border h-9 text-[13px] w-[280px] focus-ring"
+            className="bg-card-ws border border-ws-border h-9 text-[13px] w-full min-[640px]:w-[280px] focus-ring"
           />
           <button
             type="button"
             onClick={() => useAppStore.getState().newChatTab()}
-            className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 transition-opacity duration-150 focus-ring"
+            className="inline-flex shrink-0 items-center gap-2 h-9 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 transition-opacity duration-150 focus-ring"
           >
             <Plus className="size-4" />
-            New chat
+            <span className="hidden min-[640px]:inline">New chat</span>
           </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto ws-scroll px-6 py-4">
+      <div className="flex-1 overflow-y-auto ws-scroll px-4 min-[640px]:px-6 py-4">
         {totalCount === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <MessageSquare className="size-10 text-ws-disabled" />

@@ -2,12 +2,15 @@
 
 import * as React from "react";
 import {
+  Check,
   Eye,
   EyeOff,
   FolderOpen,
   Loader2,
+  Palette,
   Plus,
   RefreshCw,
+  RotateCcw,
   Trash2,
   X,
 } from "lucide-react";
@@ -39,6 +42,13 @@ import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useProvidersStore } from "@/stores/useProvidersStore";
 import { cn } from "@/lib/utils";
 import type { Provider, ProviderType } from "@/lib/types";
+import {
+  CUSTOM_COLOR_FIELDS,
+  PRESET_THEMES,
+  SWATCH_VAR_KEYS,
+  type ThemeDef,
+  getPresetTheme,
+} from "@/data/themes";
 
 function FieldRow({
   label,
@@ -343,6 +353,206 @@ function ModelsTabContent() {
   );
 }
 
+/** Build the preview swatches (surface / accent / accent-hi / border / text). */
+function themeSwatches(theme: ThemeDef): string[] {
+  return SWATCH_VAR_KEYS.map((key) => theme.vars[key] ?? "#000000");
+}
+
+function ThemeCard({
+  theme,
+  selected,
+  onSelect,
+}: {
+  theme: ThemeDef;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const swatches = themeSwatches(theme);
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      aria-label={`Select ${theme.name} theme`}
+      className={cn(
+        "group relative flex flex-col gap-2 rounded-[10px] border bg-card-ws p-3 text-left transition-colors focus-ring",
+        selected
+          ? "border-accent-hi ring-1 ring-accent-hi/40"
+          : "border-ws-border hover:border-ws-border-soft hover:bg-hover"
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-medium text-foreground truncate">
+          {theme.name}
+        </span>
+        {selected ? (
+          <span className="inline-flex size-4 items-center justify-center rounded-full bg-accent-fill text-white">
+            <Check className="size-3" />
+          </span>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-1.5">
+        {swatches.map((c, i) => (
+          <span
+            key={i}
+            className="size-4 rounded-full border border-ws-border-soft"
+            style={{ backgroundColor: c }}
+            aria-hidden
+          />
+        ))}
+      </div>
+      <p className="text-[12px] text-ws-secondary line-clamp-2">
+        {theme.description}
+      </p>
+    </button>
+  );
+}
+
+function AppearanceTabContent() {
+  const themeId = useSettingsStore((s) => s.themeId);
+  const setTheme = useSettingsStore((s) => s.setTheme);
+  const customVars = useSettingsStore((s) => s.customVars);
+  const setCustomVar = useSettingsStore((s) => s.setCustomVar);
+  const resetTheme = useSettingsStore((s) => s.resetTheme);
+
+  const hasCustom = Object.keys(customVars).length > 0;
+  const activePreset = getPresetTheme(themeId);
+
+  const onReset = () => {
+    resetTheme();
+    toast("Theme reset to default");
+  };
+
+  /** Resolve a color picker value: custom override > preset > fallback. */
+  const resolveColor = (varName: string): string =>
+    customVars[varName] ?? activePreset.vars[varName] ?? "#000000";
+
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-0.5">
+        <span className="text-[14px] font-medium text-foreground">
+          Appearance
+        </span>
+        <span className="text-[12px] text-ws-secondary">
+          Choose a preset palette or fine-tune individual colors. Changes apply
+          live across the workspace.
+        </span>
+      </div>
+
+      {/* Preset themes */}
+      <div className="grid gap-2">
+        <div className="flex items-center gap-2">
+          <Palette className="size-3.5 text-ws-secondary" />
+          <span className="text-[12.5px] font-medium text-foreground">
+            Preset themes
+          </span>
+          {hasCustom ? (
+            <Badge
+              variant="secondary"
+              className="bg-accent-fill/10 text-accent-hi border border-accent-fill/30 text-[10px] px-1.5 py-0.5"
+            >
+              custom overlay active
+            </Badge>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {PRESET_THEMES.map((t) => (
+            <ThemeCard
+              key={t.id}
+              theme={t}
+              selected={t.id === themeId}
+              onSelect={() => setTheme(t.id)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Custom overrides */}
+      <div className="grid gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[12.5px] font-medium text-foreground">
+              Custom theme
+            </span>
+            {hasCustom ? (
+              <button
+                type="button"
+                onClick={() => {
+                  // Clear just the custom overrides, keep the active preset.
+                  for (const k of Object.keys(customVars)) setCustomVar(k, "");
+                  toast("Custom colors cleared");
+                }}
+                className="text-[11px] text-ws-secondary hover:text-foreground focus-ring rounded px-1 py-0.5"
+              >
+                clear overrides
+              </button>
+            ) : null}
+          </div>
+          <span className="text-[11px] text-ws-disabled">
+            Override on top of{" "}
+            <span className="text-ws-secondary">{activePreset.name}</span>
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {CUSTOM_COLOR_FIELDS.map((field) => {
+            const value = resolveColor(field.varName);
+            return (
+              <div
+                key={field.varName}
+                className="flex items-center gap-2 rounded-[8px] border border-ws-border bg-card-ws px-2.5 py-2"
+              >
+                <label
+                  htmlFor={`custom-color-${field.varName}`}
+                  className="relative inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-ws-border-soft overflow-hidden"
+                  style={{ backgroundColor: value }}
+                  aria-hidden
+                >
+                  <input
+                    id={`custom-color-${field.varName}`}
+                    type="color"
+                    value={value}
+                    onChange={(e) => setCustomVar(field.varName, e.target.value)}
+                    className="absolute inset-0 size-full cursor-pointer opacity-0"
+                    aria-label={field.label}
+                  />
+                </label>
+                <div className="grid gap-0.5 min-w-0">
+                  <span className="text-[12px] text-foreground truncate">
+                    {field.label}
+                  </span>
+                  <span className="text-[11px] font-mono text-ws-disabled uppercase truncate">
+                    {value}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Reset */}
+      <div className="flex items-center justify-between gap-3 rounded-[10px] border border-ws-border bg-card-ws px-3 py-2.5">
+        <div className="grid gap-0.5 min-w-0">
+          <span className="text-[13px] text-foreground">Reset to default</span>
+          <span className="text-[12px] text-ws-disabled">
+            Restore the Forge Dark preset and clear all custom colors.
+          </span>
+        </div>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          onClick={onReset}
+          className="shrink-0"
+        >
+          <RotateCcw className="size-3.5" />
+          Reset
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsModal() {
   const open = useAppStore((s) => s.settingsOpen);
   const setOpen = useAppStore((s) => s.setSettingsOpen);
@@ -353,8 +563,6 @@ export function SettingsModal() {
   const setBaseUrl = useSettingsStore((s) => s.setBaseUrl);
   const defaultModelId = useSettingsStore((s) => s.defaultModelId);
   const setDefaultModelId = useSettingsStore((s) => s.setDefaultModelId);
-  const theme = useSettingsStore((s) => s.theme);
-  const setTheme = useSettingsStore((s) => s.setTheme);
   const agentInstructions = useSettingsStore((s) => s.agentInstructions);
   const setAgentInstructions = useSettingsStore((s) => s.setAgentInstructions);
   const skills = useSettingsStore((s) => s.skills);
@@ -472,19 +680,22 @@ export function SettingsModal() {
   return (
     <>
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-[640px] p-0 bg-popover border border-ws-border">
-        <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
+      <DialogContent className="max-w-[640px] max-[639px]:max-w-[calc(100vw-1.5rem)] max-[639px]:w-[calc(100vw-1.5rem)] max-h-[90vh] flex flex-col p-0 bg-popover border border-ws-border">
+        <DialogHeader className="shrink-0 px-5 pt-5 pb-3 border-b border-ws-border">
           <DialogTitle className="text-[15px]">Settings</DialogTitle>
           <DialogDescription className="sr-only">
             Configure API key, models, agent instructions and skills.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-5 py-4">
+        <div className="px-5 py-4 overflow-y-auto ws-scroll min-h-0">
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="bg-card-ws border border-ws-border h-8">
               <TabsTrigger value="general" className="text-[12.5px]">
                 General
+              </TabsTrigger>
+              <TabsTrigger value="appearance" className="text-[12.5px]">
+                Appearance
               </TabsTrigger>
               <TabsTrigger value="providers" className="text-[12.5px]">
                 Providers
@@ -574,25 +785,11 @@ export function SettingsModal() {
                     </SelectContent>
                   </Select>
                 </FieldRow>
-                <FieldRow label="Theme" htmlFor="settings-theme" hint="Goodstuff-Agent is always dark visually.">
-                  <Select value={theme} onValueChange={(v) => setTheme(v as "dark" | "light")}>
-                    <SelectTrigger
-                      id="settings-theme"
-                      className="focus-ring bg-card-ws border-ws-border text-[13px] w-full"
-                    >
-                      <SelectValue placeholder="Select theme" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover border-ws-border">
-                      <SelectItem value="dark" className="text-[13px]">
-                        Dark
-                      </SelectItem>
-                      <SelectItem value="light" className="text-[13px]">
-                        Light
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FieldRow>
               </div>
+            </TabsContent>
+
+            <TabsContent value="appearance" className="mt-4">
+              <AppearanceTabContent />
             </TabsContent>
 
             <TabsContent value="providers" className="mt-4">
@@ -746,7 +943,7 @@ export function SettingsModal() {
           </Tabs>
         </div>
 
-        <DialogFooter className="px-5 py-3 border-t border-ws-border">
+        <DialogFooter className="shrink-0 px-5 py-3 border-t border-ws-border">
           <Button
             type="button"
             onClick={() => setOpen(false)}
@@ -759,7 +956,7 @@ export function SettingsModal() {
     </Dialog>
 
     <Dialog open={addOpen} onOpenChange={setAddOpen}>
-      <DialogContent className="max-w-[420px] p-0 bg-popover border border-ws-border">
+      <DialogContent className="max-w-[420px] max-[639px]:max-w-[calc(100vw-1.5rem)] max-[639px]:w-[calc(100vw-1.5rem)] p-0 bg-popover border border-ws-border">
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
           <DialogTitle className="text-[14px]">Add provider</DialogTitle>
           <DialogDescription className="sr-only">
@@ -841,7 +1038,7 @@ export function SettingsModal() {
         if (!o) setRemoveTarget(null);
       }}
     >
-      <DialogContent className="max-w-[380px] p-0 bg-popover border border-ws-border">
+      <DialogContent className="max-w-[380px] max-[639px]:max-w-[calc(100vw-1.5rem)] max-[639px]:w-[calc(100vw-1.5rem)] p-0 bg-popover border border-ws-border">
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
           <DialogTitle className="text-[14px]">Remove provider</DialogTitle>
           <DialogDescription>

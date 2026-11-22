@@ -8,6 +8,7 @@ import templatesData from "@/data/templates.json";
 import type { TemplateDef } from "@/lib/types";
 import { useChatStore } from "@/stores/useChatStore";
 import { ThumbnailArt } from "./ThumbnailArt";
+import { TemplatePreviewDialog } from "./TemplatePreviewDialog";
 
 const TEMPLATES = templatesData as TemplateDef[];
 
@@ -34,6 +35,7 @@ const FILTERS: FilterKey[] = [
 
 export function TemplatesPage() {
   const [filter, setFilter] = useState<FilterKey>("Featured");
+  const [preview, setPreview] = useState<TemplateDef | null>(null);
 
   const filtered = useMemo(() => {
     switch (filter) {
@@ -55,12 +57,12 @@ export function TemplatesPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-ws-border px-6 py-4">
+      <header className="shrink-0 border-b border-ws-border px-4 min-[640px]:px-6 py-4">
         <h1 className="text-[20px] font-semibold text-foreground">Templates</h1>
         <p className="text-[13px] text-ws-secondary">
           Start a project from a template
         </p>
-        <div className="flex flex-wrap items-center gap-2 mt-3">
+        <div className="ws-scroll -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 pt-3 min-[640px]:flex-wrap min-[640px]:overflow-visible min-[640px]:mx-0 min-[640px]:p-0">
           {FILTERS.map((f) => {
             const active = filter === f;
             return (
@@ -69,7 +71,7 @@ export function TemplatesPage() {
                 type="button"
                 onClick={() => setFilter(f)}
                 className={cn(
-                  "rounded-[8px] px-3 py-1 text-[12px] border transition-colors duration-150 focus-ring",
+                  "rounded-[8px] px-3 py-1 text-[12px] border transition-colors duration-150 focus-ring whitespace-nowrap shrink-0",
                   active
                     ? "bg-foreground text-background border-transparent"
                     : "text-ws-secondary border-ws-border hover:bg-hover"
@@ -82,7 +84,7 @@ export function TemplatesPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto ws-scroll px-6 py-5">
+      <div className="flex-1 overflow-y-auto ws-scroll px-4 min-[640px]:px-6 py-5">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <p className="text-[13px] text-ws-secondary">
@@ -96,11 +98,11 @@ export function TemplatesPage() {
                 key={t.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => handlePick(t)}
+                onClick={() => setPreview(t)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    handlePick(t);
+                    setPreview(t);
                   }
                 }}
                 className="rounded-[12px] border border-ws-border bg-card-ws overflow-hidden hover:border-ws-border-soft hover:bg-hover cursor-pointer transition-colors duration-150 focus-ring"
@@ -122,6 +124,13 @@ export function TemplatesPage() {
           </div>
         )}
       </div>
+
+      <TemplatePreviewDialog
+        template={preview}
+        open={!!preview}
+        onOpenChange={(v) => !v && setPreview(null)}
+        onUse={handlePick}
+      />
     </div>
   );
 }

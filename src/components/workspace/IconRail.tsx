@@ -44,7 +44,10 @@ export function IconRail() {
     <TooltipProvider delayDuration={200}>
       <nav
         aria-label="Primary navigation"
-        className="flex h-full w-[66px] shrink-0 flex-col items-center gap-2 border-r border-ws-border bg-surface py-3"
+        className={cn(
+          "flex h-full w-[66px] max-[639px]:w-[52px] shrink-0 flex-col items-center gap-2",
+          "border-r border-ws-border bg-surface py-3"
+        )}
       >
         {items.map((item) => {
           const active = item.page != null && railPage === item.page;
@@ -62,12 +65,12 @@ export function IconRail() {
                   aria-label={item.label}
                   aria-pressed={active}
                   className={cn(
-                    "focus-ring flex size-11 items-center justify-center rounded-[10px] text-ws-secondary transition-colors duration-150",
+                    "focus-ring flex size-11 max-[639px]:size-9 items-center justify-center rounded-[10px] text-ws-secondary transition-colors duration-150",
                     "hover:bg-hover hover:text-foreground",
                     active && "border border-ws-border bg-card-ws text-foreground"
                   )}
                 >
-                  <Icon className="size-[18px]" />
+                  <Icon className="size-[18px] max-[639px]:size-[16px]" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right">{item.label}</TooltipContent>
@@ -81,16 +84,19 @@ export function IconRail() {
               <button
                 type="button"
                 aria-label="Help"
-                className="focus-ring flex size-11 items-center justify-center rounded-[10px] text-ws-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+                className={cn(
+                  "focus-ring flex size-11 max-[639px]:size-9 items-center justify-center rounded-[10px]",
+                  "text-ws-secondary transition-colors duration-150 hover:bg-hover hover:text-foreground"
+                )}
               >
-                <CircleHelp className="size-[18px]" />
+                <CircleHelp className="size-[18px] max-[639px]:size-[16px]" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">Help</TooltipContent>
           </Tooltip>
 
-          <Avatar className="size-11 rounded-[10px] bg-accent-fill">
-            <AvatarFallback className="rounded-[10px] bg-accent-fill text-[15px] font-semibold text-white">
+          <Avatar className="size-11 max-[639px]:size-9 rounded-[10px] bg-accent-fill">
+            <AvatarFallback className="rounded-[10px] bg-accent-fill text-[15px] max-[639px]:text-[13px] font-semibold text-white">
               G
             </AvatarFallback>
           </Avatar>

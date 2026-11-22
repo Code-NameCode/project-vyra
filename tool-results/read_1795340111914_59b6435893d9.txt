@@ -1,0 +1,877 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import {
+     5→  Eye,
+     6→  EyeOff,
+     7→  FolderOpen,
+     8→  Loader2,
+     9→  Plus,
+    10→  RefreshCw,
+    11→  Trash2,
+    12→  X,
+    13→} from "lucide-react";
+    14→import {
+    15→  Dialog,
+    16→  DialogContent,
+    17→  DialogDescription,
+    18→  DialogFooter,
+    19→  DialogHeader,
+    20→  DialogTitle,
+    21→} from "@/components/ui/dialog";
+    22→import { Button } from "@/components/ui/button";
+    23→import { Input } from "@/components/ui/input";
+    24→import { Label } from "@/components/ui/label";
+    25→import { Switch } from "@/components/ui/switch";
+    26→import { Textarea } from "@/components/ui/textarea";
+    27→import {
+    28→  Select,
+    29→  SelectContent,
+    30→  SelectItem,
+    31→  SelectTrigger,
+    32→  SelectValue,
+    33→} from "@/components/ui/select";
+    34→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    35→import { Badge } from "@/components/ui/badge";
+    36→import { toast } from "sonner";
+    37→import { useAppStore } from "@/stores/useAppStore";
+    38→import { useSettingsStore } from "@/stores/useSettingsStore";
+    39→import { useProvidersStore } from "@/stores/useProvidersStore";
+    40→import { cn } from "@/lib/utils";
+    41→import type { Provider, ProviderType } from "@/lib/types";
+    42→
+    43→function FieldRow({
+    44→  label,
+    45→  htmlFor,
+    46→  children,
+    47→  hint,
+    48→}: {
+    49→  label: string;
+    50→  htmlFor?: string;
+    51→  children: React.ReactNode;
+    52→  hint?: string;
+    53→}) {
+    54→  return (
+    55→    <div className="grid gap-1.5">
+    56→      <Label
+    57→        htmlFor={htmlFor}
+    58→        className="text-[11px] uppercase tracking-wide text-ws-secondary"
+    59→      >
+    60→        {label}
+    61→      </Label>
+    62→      {children}
+    63→      {hint ? (
+    64→        <p className="text-[12px] text-ws-disabled">{hint}</p>
+    65→      ) : null}
+    66→    </div>
+    67→  );
+    68→}
+    69→
+    70→const PROVIDER_TYPE_LABEL: Record<ProviderType, string> = {
+    71→  openai: "OpenAI",
+    72→  anthropic: "Anthropic",
+    73→  ollama: "Ollama",
+    74→  custom: "Custom",
+    75→};
+    76→
+    77→/** A provider is connected when enabled and either ollama (no key needed) or has an API key. */
+    78→function isConnected(p: Provider): boolean {
+    79→  return p.enabled && (p.type === "ollama" || !!p.apiKey);
+    80→}
+    81→
+    82→function ProviderCard({
+    83→  provider,
+    84→  onRemove,
+    85→}: {
+    86→  provider: Provider;
+    87→  onRemove: (p: Provider) => void;
+    88→}) {
+    89→  const updateProvider = useProvidersStore((s) => s.updateProvider);
+    90→  const detectProviderModels = useProvidersStore((s) => s.detectProviderModels);
+    91→  const isOllama = provider.type === "ollama";
+    92→  const connected = isConnected(provider);
+    93→  const [fetching, setFetching] = React.useState(false);
+    94→
+    95→  const onFetch = async () => {
+    96→    if (!connected) return;
+    97→    setFetching(true);
+    98→    try {
+    99→      const models = await detectProviderModels(provider.id);
+   100→      if (models.length > 0) {
+   101→        toast.success(
+   102→          `${models.length} model(s) fetched from ${provider.name}`
+   103→        );
+   104→      } else {
+   105→        toast.error("No models found — check the connection");
+   106→      }
+   107→    } catch {
+   108→      toast.error("No models found — check the connection");
+   109→    } finally {
+   110→      setFetching(false);
+   111→    }
+   112→  };
+   113→
+   114→  return (
+   115→    <div className="rounded-[10px] border border-ws-border bg-card-ws p-3">
+   116→      <div className="flex items-center gap-2">
+   117→        <Input
+   118→          aria-label="Provider name"
+   119→          value={provider.name}
+   120→          onChange={(e) =>
+   121→            updateProvider(provider.id, { name: e.target.value })
+   122→          }
+   123→          className="flex-1 h-8 bg-card-ws border-ws-border-soft text-[13px] focus-ring"
+   124→        />
+   125→        <span className="text-[11px] rounded-full px-1.5 py-0.5 border text-ws-secondary border-ws-border whitespace-nowrap">
+   126→          {PROVIDER_TYPE_LABEL[provider.type]}
+   127→        </span>
+   128→        <Switch
+   129→          checked={provider.enabled}
+   130→          onCheckedChange={(v) =>
+   131→            updateProvider(provider.id, { enabled: v })
+   132→          }
+   133→          aria-label="Toggle provider enabled"
+   134→        />
+   135→        <button
+   136→          type="button"
+   137→          onClick={() => onRemove(provider)}
+   138→          aria-label={`Remove ${provider.name}`}
+   139→          className="inline-flex items-center justify-center size-7 text-ws-secondary hover:text-red-400 hover:bg-hover rounded-[8px] focus-ring"
+   140→        >
+   141→          <Trash2 className="size-3.5" />
+   142→        </button>
+   143→      </div>
+   144→
+   145→      <div className="mt-2 grid gap-2">
+   146→        <FieldRow label="Base URL" htmlFor={`prov-base-${provider.id}`}>
+   147→          <Input
+   148→            id={`prov-base-${provider.id}`}
+   149→            value={provider.baseUrl}
+   150→            onChange={(e) =>
+   151→              updateProvider(provider.id, { baseUrl: e.target.value })
+   152→            }
+   153→            placeholder="https://api.openai.com/v1"
+   154→            className="h-8 bg-card-ws border-ws-border-soft text-[13px] focus-ring"
+   155→          />
+   156→        </FieldRow>
+   157→
+   158→        {isOllama ? (
+   159→          <p className="text-[12px] text-ws-secondary px-1 py-1">
+   160→            Ollama runs locally and needs no API key. Use Fetch models to load
+   161→            available models.
+   162→          </p>
+   163→        ) : (
+   164→          <FieldRow label="API key" htmlFor={`prov-key-${provider.id}`}>
+   165→            <Input
+   166→              id={`prov-key-${provider.id}`}
+   167→              type="password"
+   168→              value={provider.apiKey}
+   169→              onChange={(e) =>
+   170→                updateProvider(provider.id, { apiKey: e.target.value })
+   171→              }
+   172→              onBlur={() => {
+   173→                if (provider.apiKey.trim()) {
+   174→                  void detectProviderModels(provider.id, true);
+   175→                  toast(
+   176→                    "Fetching models — all hidden until you select them"
+   177→                  );
+   178→                }
+   179→              }}
+   180→              placeholder="sk-..."
+   181→              className="h-8 bg-card-ws border-ws-border-soft text-[13px] focus-ring"
+   182→            />
+   183→          </FieldRow>
+   184→        )}
+   185→      </div>
+   186→
+   187→      <div className="mt-2 flex items-center justify-between px-2">
+   188→        <span className="text-[12px] text-ws-secondary">
+   189→          {provider.models.length} model(s)
+   190→        </span>
+   191→        <button
+   192→          type="button"
+   193→          onClick={onFetch}
+   194→          disabled={!connected || fetching}
+   195→          className={cn(
+   196→            "inline-flex items-center gap-2 h-7 px-2.5 rounded-[8px] bg-accent-fill text-white text-[12px] hover:opacity-90 focus-ring",
+   197→            (!connected || fetching) && "opacity-50 cursor-not-allowed"
+   198→          )}
+   199→        >
+   200→          {fetching ? (
+   201→            <Loader2 className="size-3.5 animate-spin" />
+   202→          ) : (
+   203→            <RefreshCw className="size-3.5" />
+   204→          )}
+   205→          {fetching ? "Fetching…" : "Fetch models"}
+   206→        </button>
+   207→      </div>
+   208→    </div>
+   209→  );
+   210→}
+   211→
+   212→function ModelsTabContent() {
+   213→  const providers = useProvidersStore((s) => s.providers);
+   214→  const detectProviderModels = useProvidersStore((s) => s.detectProviderModels);
+   215→  const toggleModelHidden = useProvidersStore((s) => s.toggleModelHidden);
+   216→  const [fetchingId, setFetchingId] = React.useState<string | null>(null);
+   217→
+   218→  const onFetch = async (p: Provider) => {
+   219→    if (!isConnected(p)) return;
+   220→    setFetchingId(p.id);
+   221→    try {
+   222→      const models = await detectProviderModels(p.id);
+   223→      if (models.length > 0) {
+   224→        toast.success(`${models.length} model(s) fetched from ${p.name}`);
+   225→      } else {
+   226→        toast.error("No models found — check the connection");
+   227→      }
+   228→    } catch {
+   229→      toast.error("No models found — check the connection");
+   230→    } finally {
+   231→      setFetchingId(null);
+   232→    }
+   233→  };
+   234→
+   235→  return (
+   236→    <div className="grid gap-2">
+   237→      <div className="grid gap-0.5">
+   238→        <span className="text-[14px] font-medium text-foreground">Models</span>
+   239→        <span className="text-[12px] text-ws-secondary">
+   240→          Fetch models from connected providers and choose which to show in the
+   241→          composer.
+   242→        </span>
+   243→        <p className="text-[12px] text-ws-secondary mt-1">
+   244→          Connected providers auto-fetch models hidden by default — toggle the
+   245→          eye to show a model in the composer.
+   246→        </p>
+   247→      </div>
+   248→
+   249→      <div className="ws-scroll max-h-[400px] overflow-y-auto flex flex-col gap-2 mt-3">
+   250→        {providers.length === 0 ? (
+   251→          <p className="text-[12.5px] text-ws-disabled">
+   252→            No providers configured.
+   253→          </p>
+   254→        ) : (
+   255→          providers.map((p) => {
+   256→            const connected = isConnected(p);
+   257→            const fetching = fetchingId === p.id;
+   258→            return (
+   259→              <div
+   260→                key={p.id}
+   261→                className="rounded-[10px] border border-ws-border bg-card-ws p-3"
+   262→              >
+   263→                <div className="flex items-center gap-2">
+   264→                  <span className="text-[13px] font-medium text-foreground truncate">
+   265→                    {p.name}
+   266→                  </span>
+   267→                  <span className="text-[10px] rounded-full px-1.5 py-0.5 border text-ws-secondary border-ws-border">
+   268→                    {PROVIDER_TYPE_LABEL[p.type]}
+   269→                  </span>
+   270→                  <span
+   271→                    className={cn(
+   272→                      "ml-auto text-[10px] rounded-full px-1.5 py-0.5 border",
+   273→                      connected
+   274→                        ? "text-accent-hi border-accent-fill/30 bg-accent-fill/10"
+   275→                        : "text-ws-disabled border-ws-border"
+   276→                    )}
+   277→                  >
+   278→                    {connected ? "connected" : "not connected"}
+   279→                  </span>
+   280→                </div>
+   281→
+   282→                <div className="mt-2">
+   283→                  <button
+   284→                    type="button"
+   285→                    onClick={() => onFetch(p)}
+   286→                    disabled={!connected || fetching}
+   287→                    className={cn(
+   288→                      "inline-flex items-center gap-2 h-7 px-2.5 rounded-[8px] bg-accent-fill text-white text-[12px] hover:opacity-90 focus-ring",
+   289→                      (!connected || fetching) &&
+   290→                        "opacity-50 cursor-not-allowed"
+   291→                    )}
+   292→                  >
+   293→                    {fetching ? (
+   294→                      <Loader2 className="size-3.5 animate-spin" />
+   295→                    ) : (
+   296→                      <RefreshCw className="size-3.5" />
+   297→                    )}
+   298→                    {fetching ? "Fetching…" : "Fetch models"}
+   299→                  </button>
+   300→                </div>
+   301→
+   302→                <div className="mt-2 flex flex-col gap-0.5">
+   303→                  {p.models.length === 0 ? (
+   304→                    <p className="text-[12px] text-ws-disabled px-2 py-1">
+   305→                      No models yet — click Fetch
+   306→                    </p>
+   307→                  ) : (
+   308→                    p.models.map((m) => (
+   309→                      <div
+   310→                        key={m.id}
+   311→                        className="flex items-center gap-2 rounded-[6px] px-2 py-1 hover:bg-hover"
+   312→                      >
+   313→                        <span className="text-[12.5px] text-foreground font-mono truncate">
+   314→                          {m.name}
+   315→                        </span>
+   316→                        {m.hidden ? (
+   317→                          <span className="text-[10px] text-ws-disabled border border-ws-border rounded-full px-1.5 py-0.5">
+   318→                            hidden
+   319→                          </span>
+   320→                        ) : null}
+   321→                        <button
+   322→                          type="button"
+   323→                          onClick={() => toggleModelHidden(p.id, m.id)}
+   324→                          aria-label={m.hidden ? "Show" : "Hide"}
+   325→                          className="ml-auto inline-flex items-center justify-center size-6 rounded-[6px] text-ws-secondary hover:bg-card-ws hover:text-foreground focus-ring"
+   326→                        >
+   327→                          {m.hidden ? (
+   328→                            <EyeOff className="size-3.5" />
+   329→                          ) : (
+   330→                            <Eye className="size-3.5" />
+   331→                          )}
+   332→                        </button>
+   333→                      </div>
+   334→                    ))
+   335→                  )}
+   336→                </div>
+   337→              </div>
+   338→            );
+   339→          })
+   340→        )}
+   341→      </div>
+   342→    </div>
+   343→  );
+   344→}
+   345→
+   346→export function SettingsModal() {
+   347→  const open = useAppStore((s) => s.settingsOpen);
+   348→  const setOpen = useAppStore((s) => s.setSettingsOpen);
+   349→
+   350→  const apiKey = useSettingsStore((s) => s.apiKey);
+   351→  const setApiKey = useSettingsStore((s) => s.setApiKey);
+   352→  const baseUrl = useSettingsStore((s) => s.baseUrl);
+   353→  const setBaseUrl = useSettingsStore((s) => s.setBaseUrl);
+   354→  const defaultModelId = useSettingsStore((s) => s.defaultModelId);
+   355→  const setDefaultModelId = useSettingsStore((s) => s.setDefaultModelId);
+   356→  const theme = useSettingsStore((s) => s.theme);
+   357→  const setTheme = useSettingsStore((s) => s.setTheme);
+   358→  const agentInstructions = useSettingsStore((s) => s.agentInstructions);
+   359→  const setAgentInstructions = useSettingsStore((s) => s.setAgentInstructions);
+   360→  const skills = useSettingsStore((s) => s.skills);
+   361→  const addSkill = useSettingsStore((s) => s.addSkill);
+   362→  const removeSkill = useSettingsStore((s) => s.removeSkill);
+   363→  const skillsFolderPath = useSettingsStore((s) => s.skillsFolderPath);
+   364→  const setSkillsFolderPath = useSettingsStore((s) => s.setSkillsFolderPath);
+   365→  const useRealApi = useSettingsStore((s) => s.useRealApi);
+   366→  const setUseRealApi = useSettingsStore((s) => s.setUseRealApi);
+   367→
+   368→  const providers = useProvidersStore((s) => s.providers);
+   369→  const addProvider = useProvidersStore((s) => s.addProvider);
+   370→  const removeProvider = useProvidersStore((s) => s.removeProvider);
+   371→
+   372→  // Visible provider models (from connected providers, non-hidden) — used to
+   373→  // populate the General tab's default-model picker instead of the old static
+   374→  // built-in model list.
+   375→  const visibleModels = React.useMemo(() => {
+   376→    const out: { id: string; label: string }[] = [];
+   377→    for (const p of providers) {
+   378→      if (!isConnected(p)) continue;
+   379→      for (const m of p.models) {
+   380→        if (m.hidden) continue;
+   381→        out.push({ id: m.id, label: m.name });
+   382→      }
+   383→    }
+   384→    return out;
+   385→  }, [providers]);
+   386→
+   387→  const [newSkill, setNewSkill] = React.useState("");
+   388→  const [tab, setTab] = React.useState("general");
+   389→
+   390→  const [addOpen, setAddOpen] = React.useState(false);
+   391→  const [newName, setNewName] = React.useState("");
+   392→  const [newType, setNewType] = React.useState<ProviderType>("custom");
+   393→  const [newBaseUrl, setNewBaseUrl] = React.useState("");
+   394→  const [removeTarget, setRemoveTarget] = React.useState<Provider | null>(
+   395→    null
+   396→  );
+   397→
+   398→  const openAddProvider = () => {
+   399→    setNewName("");
+   400→    setNewType("custom");
+   401→    setNewBaseUrl("");
+   402→    setAddOpen(true);
+   403→  };
+   404→
+   405→  const confirmAddProvider = () => {
+   406→    const name = newName.trim();
+   407→    if (!name) {
+   408→      toast.error("Provider name is required");
+   409→      return;
+   410→    }
+   411→    addProvider({ name, type: newType, baseUrl: newBaseUrl.trim() });
+   412→    toast.success("Provider added");
+   413→    setAddOpen(false);
+   414→  };
+   415→
+   416→  const confirmRemove = () => {
+   417→    if (!removeTarget) return;
+   418→    removeProvider(removeTarget.id);
+   419→    toast.success("Provider removed");
+   420→    setRemoveTarget(null);
+   421→  };
+   422→
+   423→  const addSkillOnEnter = (e: React.KeyboardEvent<HTMLInputElement>) => {
+   424→    if (e.key !== "Enter") return;
+   425→    e.preventDefault();
+   426→    const v = newSkill.trim();
+   427→    if (!v) return;
+   428→    addSkill(v);
+   429→    setNewSkill("");
+   430→  };
+   431→
+   432→  const folderInputRef = React.useRef<HTMLInputElement>(null);
+   433→
+   434→  React.useEffect(() => {
+   435→    const el = folderInputRef.current;
+   436→    if (el) {
+   437→      el.setAttribute("webkitdirectory", "");
+   438→    }
+   439→  }, []);
+   440→
+   441→  const onFolderPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+   442→    const fileList = e.target.files;
+   443→    if (!fileList || fileList.length === 0) {
+   444→      e.target.value = "";
+   445→      return;
+   446→    }
+   447→    const first = fileList[0] as File & { webkitRelativePath?: string };
+   448→    const rel = first.webkitRelativePath;
+   449→    if (rel) {
+   450→      const folderName = rel.split("/")[0];
+   451→      if (folderName) setSkillsFolderPath(folderName);
+   452→    }
+   453→    const added = new Set<string>();
+   454→    for (let i = 0; i < fileList.length; i++) {
+   455→      const name = fileList[i].name;
+   456→      const lower = name.toLowerCase();
+   457→      if (!lower.endsWith(".md") && !lower.endsWith(".txt")) continue;
+   458→      const base = name.replace(/\.[^.]+$/, "");
+   459→      if (!base) continue;
+   460→      if (skills.includes(base) || added.has(base)) continue;
+   461→      addSkill(base);
+   462→      added.add(base);
+   463→    }
+   464→    if (added.size > 0) {
+   465→      toast.success(`${added.size} skill(s) imported from folder`);
+   466→    } else {
+   467→      toast("No skill files found in folder");
+   468→    }
+   469→    e.target.value = "";
+   470→  };
+   471→
+   472→  return (
+   473→    <>
+   474→    <Dialog open={open} onOpenChange={setOpen}>
+   475→      <DialogContent className="max-w-[640px] p-0 bg-popover border border-ws-border">
+   476→        <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
+   477→          <DialogTitle className="text-[15px]">Settings</DialogTitle>
+   478→          <DialogDescription className="sr-only">
+   479→            Configure API key, models, agent instructions and skills.
+   480→          </DialogDescription>
+   481→        </DialogHeader>
+   482→
+   483→        <div className="px-5 py-4">
+   484→          <Tabs value={tab} onValueChange={setTab}>
+   485→            <TabsList className="bg-card-ws border border-ws-border h-8">
+   486→              <TabsTrigger value="general" className="text-[12.5px]">
+   487→                General
+   488→              </TabsTrigger>
+   489→              <TabsTrigger value="providers" className="text-[12.5px]">
+   490→                Providers
+   491→              </TabsTrigger>
+   492→              <TabsTrigger value="models" className="text-[12.5px]">
+   493→                Models
+   494→              </TabsTrigger>
+   495→              <TabsTrigger value="agents" className="text-[12.5px]">
+   496→                Agents
+   497→              </TabsTrigger>
+   498→              <TabsTrigger value="skills" className="text-[12.5px]">
+   499→                Skills
+   500→              </TabsTrigger>
+   501→            </TabsList>
+   502→
+   503→            <TabsContent value="general" className="mt-4">
+   504→              <div className="grid gap-4">
+   505→                <FieldRow label="API key" htmlFor="settings-api-key">
+   506→                  <Input
+   507→                    id="settings-api-key"
+   508→                    type="password"
+   509→                    value={apiKey}
+   510→                    onChange={(e) => setApiKey(e.target.value)}
+   511→                    placeholder="sk-..."
+   512→                    className="focus-ring bg-card-ws border-ws-border text-[13px]"
+   513→                  />
+   514→                </FieldRow>
+   515→                <FieldRow label="Base URL" htmlFor="settings-base-url">
+   516→                  <Input
+   517→                    id="settings-base-url"
+   518→                    value={baseUrl}
+   519→                    onChange={(e) => setBaseUrl(e.target.value)}
+   520→                    placeholder="https://api.openai.com/v1"
+   521→                    className="focus-ring bg-card-ws border-ws-border text-[13px]"
+   522→                  />
+   523→                </FieldRow>
+   524→                <div className="flex items-center justify-between rounded-lg border border-ws-border bg-card-ws px-3 py-2.5">
+   525→                  <div className="grid gap-0.5">
+   526→                    <span className="text-[13px] text-foreground">
+   527→                      Use real OpenAI-compatible API
+   528→                    </span>
+   529→                    <span className="text-[12px] text-ws-disabled">
+   530→                      When off, Goodstuff-Agent uses mock streaming responses.
+   531→                    </span>
+   532→                  </div>
+   533→                  <Switch
+   534→                    checked={useRealApi}
+   535→                    onCheckedChange={setUseRealApi}
+   536→                    aria-label="Use real API"
+   537→                  />
+   538→                </div>
+   539→                <FieldRow label="Default model" htmlFor="settings-model">
+   540→                  <Select
+   541→                    value={
+   542→                      visibleModels.some((m) => m.id === defaultModelId)
+   543→                        ? defaultModelId
+   544→                        : undefined
+   545→                    }
+   546→                    onValueChange={setDefaultModelId}
+   547→                  >
+   548→                    <SelectTrigger
+   549→                      id="settings-model"
+   550→                      className="focus-ring bg-card-ws border-ws-border text-[13px] w-full"
+   551→                    >
+   552→                      <SelectValue placeholder="Select default model" />
+   553→                    </SelectTrigger>
+   554→                    <SelectContent className="bg-popover border-ws-border">
+   555→                      {visibleModels.length === 0 ? (
+   556→                        <SelectItem
+   557→                          value="__none__"
+   558→                          disabled
+   559→                          className="text-[13px]"
+   560→                        >
+   561→                          No models available
+   562→                        </SelectItem>
+   563→                      ) : (
+   564→                        visibleModels.map((m) => (
+   565→                          <SelectItem
+   566→                            key={m.id}
+   567→                            value={m.id}
+   568→                            className="text-[13px]"
+   569→                          >
+   570→                            {m.label}
+   571→                          </SelectItem>
+   572→                        ))
+   573→                      )}
+   574→                    </SelectContent>
+   575→                  </Select>
+   576→                </FieldRow>
+   577→                <FieldRow label="Theme" htmlFor="settings-theme" hint="Goodstuff-Agent is always dark visually.">
+   578→                  <Select value={theme} onValueChange={(v) => setTheme(v as "dark" | "light")}>
+   579→                    <SelectTrigger
+   580→                      id="settings-theme"
+   581→                      className="focus-ring bg-card-ws border-ws-border text-[13px] w-full"
+   582→                    >
+   583→                      <SelectValue placeholder="Select theme" />
+   584→                    </SelectTrigger>
+   585→                    <SelectContent className="bg-popover border-ws-border">
+   586→                      <SelectItem value="dark" className="text-[13px]">
+   587→                        Dark
+   588→                      </SelectItem>
+   589→                      <SelectItem value="light" className="text-[13px]">
+   590→                        Light
+   591→                      </SelectItem>
+   592→                    </SelectContent>
+   593→                  </Select>
+   594→                </FieldRow>
+   595→              </div>
+   596→            </TabsContent>
+   597→
+   598→            <TabsContent value="providers" className="mt-4">
+   599→              <div className="grid gap-3">
+   600→                <div className="flex items-start justify-between gap-3">
+   601→                  <div className="grid gap-0.5">
+   602→                    <span className="text-[14px] font-medium text-foreground">
+   603→                      Model providers
+   604→                    </span>
+   605→                    <span className="text-[12px] text-ws-secondary">
+   606→                      Configure API endpoints and keys. Use Fetch models to load
+   607→                      available models from each provider.
+   608→                    </span>
+   609→                  </div>
+   610→                  <button
+   611→                    type="button"
+   612→                    onClick={openAddProvider}
+   613→                    className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] border border-ws-border bg-card-ws text-[13px] hover:bg-hover focus-ring"
+   614→                  >
+   615→                    <Plus className="size-3.5" />
+   616→                    Add provider
+   617→                  </button>
+   618→                </div>
+   619→
+   620→                <div className="ws-scroll max-h-[360px] overflow-y-auto flex flex-col gap-2 mt-3">
+   621→                  {providers.length === 0 ? (
+   622→                    <p className="text-[12.5px] text-ws-disabled">
+   623→                      No providers configured.
+   624→                    </p>
+   625→                  ) : (
+   626→                    providers.map((p) => (
+   627→                      <ProviderCard
+   628→                        key={p.id}
+   629→                        provider={p}
+   630→                        onRemove={setRemoveTarget}
+   631→                      />
+   632→                    ))
+   633→                  )}
+   634→                </div>
+   635→              </div>
+   636→            </TabsContent>
+   637→
+   638→            <TabsContent value="models" className="mt-4">
+   639→              <ModelsTabContent />
+   640→            </TabsContent>
+   641→
+   642→            <TabsContent value="agents" className="mt-4">
+   643→              <FieldRow label="AGENTS.md" htmlFor="settings-agents">
+   644→                <Textarea
+   645→                  id="settings-agents"
+   646→                  value={agentInstructions}
+   647→                  onChange={(e) => setAgentInstructions(e.target.value)}
+   648→                  className="focus-ring bg-card-ws border-ws-border min-h-[200px] font-mono text-[13px]"
+   649→                />
+   650→              </FieldRow>
+   651→            </TabsContent>
+   652→
+   653→            <TabsContent value="skills" className="mt-4">
+   654→              <div className="grid gap-1.5">
+   655→                <div className="grid gap-0.5">
+   656→                  <span className="text-[14px] font-medium text-foreground">
+   657→                    Skills folder
+   658→                  </span>
+   659→                  <span className="text-[12px] text-ws-secondary">
+   660→                    Pick a local folder of skill files (.md). Detected skills
+   661→                    are added below.
+   662→                  </span>
+   663→                </div>
+   664→                <div className="flex items-center gap-2 mt-2">
+   665→                  <Input
+   666→                    readOnly
+   667→                    value={skillsFolderPath || "No folder selected"}
+   668→                    aria-label="Skills folder path"
+   669→                    className="bg-card-ws border border-ws-border h-9 text-[13px] flex-1 font-mono focus-ring"
+   670→                  />
+   671→                  <button
+   672→                    type="button"
+   673→                    onClick={() => folderInputRef.current?.click()}
+   674→                    className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-ws-border bg-card-ws text-[13px] hover:bg-hover focus-ring"
+   675→                  >
+   676→                    <FolderOpen className="size-3.5" />
+   677→                    Browse
+   678→                  </button>
+   679→                </div>
+   680→                <input
+   681→                  ref={(el) => {
+   682→                    folderInputRef.current = el;
+   683→                    if (el) el.setAttribute("webkitdirectory", "");
+   684→                  }}
+   685→                  type="file"
+   686→                  multiple
+   687→                  accept=".md,.txt"
+   688→                  onChange={onFolderPicked}
+   689→                  aria-hidden
+   690→                  className="hidden"
+   691→                />
+   692→              </div>
+   693→
+   694→              <div className="grid gap-3 mt-4">
+   695→                <div className="flex flex-wrap gap-2">
+   696→                  {skills.length === 0 ? (
+   697→                    <p className="text-[12.5px] text-ws-disabled">
+   698→                      No skills configured.
+   699→                    </p>
+   700→                  ) : (
+   701→                    skills.map((s) => (
+   702→                      <Badge
+   703→                        key={s}
+   704→                        variant="secondary"
+   705→                        className="bg-hover text-foreground border border-ws-border-soft gap-1.5 pl-2.5 pr-1 py-1 text-[12px]"
+   706→                      >
+   707→                        {s}
+   708→                        <button
+   709→                          type="button"
+   710→                          onClick={() => removeSkill(s)}
+   711→                          aria-label={`Remove ${s}`}
+   712→                          className="focus-ring rounded p-0.5 text-ws-secondary hover:text-foreground"
+   713→                        >
+   714→                          <X className="size-3" />
+   715→                        </button>
+   716→                      </Badge>
+   717→                    ))
+   718→                  )}
+   719→                </div>
+   720→                <div className="flex items-center gap-2">
+   721→                  <Input
+   722→                    value={newSkill}
+   723→                    onChange={(e) => setNewSkill(e.target.value)}
+   724→                    onKeyDown={addSkillOnEnter}
+   725→                    placeholder="Add a skill and press Enter"
+   726→                    className="focus-ring bg-card-ws border-ws-border text-[13px]"
+   727→                  />
+   728→                  <Button
+   729→                    type="button"
+   730→                    variant="outline"
+   731→                    size="sm"
+   732→                    className="bg-card-ws border-ws-border text-ws-secondary hover:text-foreground"
+   733→                    onClick={() => {
+   734→                      const v = newSkill.trim();
+   735→                      if (!v) return;
+   736→                      addSkill(v);
+   737→                      setNewSkill("");
+   738→                    }}
+   739→                  >
+   740→                    <Plus className="size-3.5" />
+   741→                    Add
+   742→                  </Button>
+   743→                </div>
+   744→              </div>
+   745→            </TabsContent>
+   746→          </Tabs>
+   747→        </div>
+   748→
+   749→        <DialogFooter className="px-5 py-3 border-t border-ws-border">
+   750→          <Button
+   751→            type="button"
+   752→            onClick={() => setOpen(false)}
+   753→            className="bg-accent-fill text-white hover:bg-accent-hi"
+   754→          >
+   755→            Done
+   756→          </Button>
+   757→        </DialogFooter>
+   758→      </DialogContent>
+   759→    </Dialog>
+   760→
+   761→    <Dialog open={addOpen} onOpenChange={setAddOpen}>
+   762→      <DialogContent className="max-w-[420px] p-0 bg-popover border border-ws-border">
+   763→        <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
+   764→          <DialogTitle className="text-[14px]">Add provider</DialogTitle>
+   765→          <DialogDescription className="sr-only">
+   766→            Add a new model provider configuration.
+   767→          </DialogDescription>
+   768→        </DialogHeader>
+   769→        <div className="px-5 py-4 grid gap-3">
+   770→          <FieldRow label="Name" htmlFor="new-prov-name">
+   771→            <Input
+   772→              id="new-prov-name"
+   773→              value={newName}
+   774→              onChange={(e) => setNewName(e.target.value)}
+   775→              placeholder="My provider"
+   776→              className="h-8 bg-card-ws border-ws-border text-[13px] focus-ring"
+   777→            />
+   778→          </FieldRow>
+   779→          <FieldRow label="Type" htmlFor="new-prov-type">
+   780→            <Select
+   781→              value={newType}
+   782→              onValueChange={(v) => setNewType(v as ProviderType)}
+   783→            >
+   784→              <SelectTrigger
+   785→                id="new-prov-type"
+   786→                className="h-8 bg-card-ws border-ws-border text-[13px] w-full focus-ring"
+   787→              >
+   788→                <SelectValue placeholder="Select type" />
+   789→              </SelectTrigger>
+   790→              <SelectContent className="bg-popover border-ws-border">
+   791→                <SelectItem value="openai" className="text-[13px]">
+   792→                  OpenAI
+   793→                </SelectItem>
+   794→                <SelectItem value="anthropic" className="text-[13px]">
+   795→                  Anthropic
+   796→                </SelectItem>
+   797→                <SelectItem value="ollama" className="text-[13px]">
+   798→                  Ollama
+   799→                </SelectItem>
+   800→                <SelectItem value="custom" className="text-[13px]">
+   801→                  Custom
+   802→                </SelectItem>
+   803→              </SelectContent>
+   804→            </Select>
+   805→          </FieldRow>
+   806→          <FieldRow label="Base URL" htmlFor="new-prov-url">
+   807→            <Input
+   808→              id="new-prov-url"
+   809→              value={newBaseUrl}
+   810→              onChange={(e) => setNewBaseUrl(e.target.value)}
+   811→              placeholder="https://api.openai.com/v1"
+   812→              className="h-8 bg-card-ws border-ws-border text-[13px] focus-ring"
+   813→            />
+   814→          </FieldRow>
+   815→        </div>
+   816→        <DialogFooter className="px-5 py-3 border-t border-ws-border">
+   817→          <Button
+   818→            type="button"
+   819→            variant="outline"
+   820→            size="sm"
+   821→            onClick={() => setAddOpen(false)}
+   822→            className="bg-card-ws border-ws-border text-ws-secondary hover:text-foreground"
+   823→          >
+   824→            Cancel
+   825→          </Button>
+   826→          <Button
+   827→            type="button"
+   828→            size="sm"
+   829→            onClick={confirmAddProvider}
+   830→            className="bg-accent-fill text-white hover:bg-accent-hi"
+   831→          >
+   832→            Add
+   833→          </Button>
+   834→        </DialogFooter>
+   835→      </DialogContent>
+   836→    </Dialog>
+   837→
+   838→    <Dialog
+   839→      open={removeTarget !== null}
+   840→      onOpenChange={(o) => {
+   841→        if (!o) setRemoveTarget(null);
+   842→      }}
+   843→    >
+   844→      <DialogContent className="max-w-[380px] p-0 bg-popover border border-ws-border">
+   845→        <DialogHeader className="px-5 pt-5 pb-3 border-b border-ws-border">
+   846→          <DialogTitle className="text-[14px]">Remove provider</DialogTitle>
+   847→          <DialogDescription>
+   848→            {removeTarget
+   849→              ? `Remove "${removeTarget.name}"? This will delete the provider and its model list.`
+   850→              : ""}
+   851→          </DialogDescription>
+   852→        </DialogHeader>
+   853→        <DialogFooter className="px-5 py-3 border-t border-ws-border">
+   854→          <Button
+   855→            type="button"
+   856→            variant="outline"
+   857→            size="sm"
+   858→            onClick={() => setRemoveTarget(null)}
+   859→            className="bg-card-ws border-ws-border text-ws-secondary hover:text-foreground"
+   860→          >
+   861→            Cancel
+   862→          </Button>
+   863→          <Button
+   864→            type="button"
+   865→            size="sm"
+   866→            onClick={confirmRemove}
+   867→            className="bg-destructive text-white hover:opacity-90"
+   868→          >
+   869→            Remove
+   870→          </Button>
+   871→        </DialogFooter>
+   872→      </DialogContent>
+   873→    </Dialog>
+   874→    </>
+   875→  );
+   876→}
+   877→

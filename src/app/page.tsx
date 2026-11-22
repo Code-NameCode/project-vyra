@@ -24,6 +24,7 @@ import {
 import { useAppStore } from "@/stores/useAppStore";
 import { useChatStore } from "@/stores/useChatStore";
 import { useProvidersStore } from "@/stores/useProvidersStore";
+import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 
 function useMediaQuery(query: string): boolean {
@@ -94,6 +95,9 @@ export default function Home() {
 
   const isDesktop = useMediaQuery("(min-width: 1100px)");
 
+  // Apply the active theme (preset + custom overrides) to <html>.
+  useTheme();
+
   // auto-detect locally installed Ollama models on mount (best-effort)
   useEffect(() => {
     void useProvidersStore.getState().detectOllama();
@@ -160,7 +164,7 @@ export default function Home() {
               <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
                 <SheetContent
                   side="left"
-                  className="w-80 border-ws-border bg-surface p-0"
+                  className="w-80 max-w-[92vw] border-ws-border bg-surface p-0"
                 >
                   <SheetTitle className="sr-only">Navigation</SheetTitle>
                   <SheetDescription className="sr-only">
@@ -212,7 +216,7 @@ export default function Home() {
               >
                 <SheetContent
                   side="right"
-                  className="w-[420px] max-w-[90vw] border-ws-border bg-surface p-0"
+                  className="w-[420px] max-w-[92vw] border-ws-border bg-surface p-0"
                 >
                   <SheetTitle className="sr-only">Tools panel</SheetTitle>
                   <SheetDescription className="sr-only">

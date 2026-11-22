@@ -213,13 +213,22 @@
 .stream-caret::after {
   content: "";
   display: inline-block;
-  width: 7px;
-  height: 15px;
+  width: 2px;
+  height: 1.05em;
   margin-left: 2px;
   vertical-align: text-bottom;
   background: var(--accent-hi);
   border-radius: 1px;
-  animation: blink 1s steps(2, start) infinite;
+  animation: caret-blink 1.05s ease-in-out infinite;
+}
+@keyframes caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
 }
 @keyframes blink {
   to {

@@ -131,7 +131,7 @@ export function ExtensionsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-ws-border px-6 py-4 flex items-center gap-4">
+      <header className="shrink-0 border-b border-ws-border px-4 min-[640px]:px-6 py-4 flex flex-col min-[640px]:flex-row items-start min-[640px]:items-center gap-3 min-[640px]:gap-4">
         <div>
           <h1 className="text-[20px] font-semibold text-foreground">
             Extensions
@@ -145,11 +145,11 @@ export function ExtensionsPage() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search extensions"
           aria-label="Search extensions"
-          className="bg-card-ws border border-ws-border h-9 text-[13px] w-[280px] ml-auto focus-ring"
+          className="bg-card-ws border border-ws-border h-9 text-[13px] w-full min-[640px]:w-[280px] min-[640px]:ml-auto focus-ring"
         />
       </header>
 
-      <div className="flex-1 overflow-y-auto ws-scroll px-6 py-5">
+      <div className="flex-1 overflow-y-auto ws-scroll px-4 min-[640px]:px-6 py-5">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <p className="text-[13px] text-ws-secondary">

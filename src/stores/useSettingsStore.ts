@@ -2,12 +2,14 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { getPresetTheme } from "@/data/themes";
 
 interface SettingsState {
   apiKey: string;
   baseUrl: string;
   defaultModelId: string;
-  theme: "dark" | "light";
+  themeId: string;
+  customVars: Record<string, string>;
   agentInstructions: string;
   skills: string[];
   skillsFolderPath: string;
@@ -16,7 +18,10 @@ interface SettingsState {
   setApiKey: (v: string) => void;
   setBaseUrl: (v: string) => void;
   setDefaultModelId: (v: string) => void;
-  setTheme: (v: "dark" | "light") => void;
+  setTheme: (id: string) => void;
+  setCustomVar: (name: string, value: string) => void;
+  clearCustomVars: () => void;
+  resetTheme: () => void;
   setAgentInstructions: (v: string) => void;
   setUseRealApi: (v: boolean) => void;
   setSkillsFolderPath: (v: string) => void;
@@ -45,7 +50,8 @@ export const useSettingsStore = create<SettingsState>()(
       apiKey: "",
       baseUrl: "https://api.openai.com/v1",
       defaultModelId: "",
-      theme: "dark",
+      themeId: "forge-dark",
+      customVars: {},
       agentInstructions: DEFAULT_INSTRUCTIONS,
       skills: [
         "Web search",
@@ -60,7 +66,23 @@ export const useSettingsStore = create<SettingsState>()(
       setApiKey: (v) => set({ apiKey: v }),
       setBaseUrl: (v) => set({ baseUrl: v }),
       setDefaultModelId: (v) => set({ defaultModelId: v }),
-      setTheme: (v) => set({ theme: v }),
+      setTheme: (id) => set({ themeId: id }),
+      setCustomVar: (name, value) =>
+        set((st) => {
+          const next = { ...st.customVars };
+          if (!value) {
+            delete next[name];
+          } else {
+            next[name] = value;
+          }
+          return { customVars: next };
+        }),
+      clearCustomVars: () => set({ customVars: {} }),
+      resetTheme: () =>
+        set({
+          themeId: getPresetTheme("forge-dark").id,
+          customVars: {},
+        }),
       setAgentInstructions: (v) => set({ agentInstructions: v }),
       setUseRealApi: (v) => set({ useRealApi: v }),
       setSkillsFolderPath: (v) => set({ skillsFolderPath: v }),

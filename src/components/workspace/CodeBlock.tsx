@@ -10,9 +10,11 @@ import { cn } from "@/lib/utils";
 export function CodeBlock({
   code,
   language,
+  streaming,
 }: {
   code: string;
   language?: string;
+  streaming?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -58,25 +60,42 @@ export function CodeBlock({
         </button>
       </div>
       <div className="p-3 overflow-x-auto ws-scroll">
-        <SyntaxHighlighter
-          language={lang}
-          style={oneDark}
-          customStyle={{
-            margin: 0,
-            background: "transparent",
-            fontSize: "12.5px",
-            padding: 0,
-          }}
-          codeTagProps={{
-            style: {
-              fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
-              color: "#f2f2f2",
-            },
-          }}
-          wrapLongLines={false}
-        >
-          {code}
-        </SyntaxHighlighter>
+        {streaming ? (
+          // plain code while streaming — avoids re-running Prism on every token
+          <pre className="m-0">
+            <code
+              className="text-[12.5px]"
+              style={{
+                fontFamily:
+                  "var(--font-geist-mono), ui-monospace, monospace",
+                color: "#f2f2f2",
+                whiteSpace: "pre",
+              }}
+            >
+              {code}
+            </code>
+          </pre>
+        ) : (
+          <SyntaxHighlighter
+            language={lang}
+            style={oneDark}
+            customStyle={{
+              margin: 0,
+              background: "transparent",
+              fontSize: "12.5px",
+              padding: 0,
+            }}
+            codeTagProps={{
+              style: {
+                fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+                color: "#f2f2f2",
+              },
+            }}
+            wrapLongLines={false}
+          >
+            {code}
+          </SyntaxHighlighter>
+        )}
       </div>
     </div>
   );

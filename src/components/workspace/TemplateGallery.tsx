@@ -10,6 +10,7 @@ import type { TemplateDef } from "@/lib/types";
 import { useAppStore } from "@/stores/useAppStore";
 import { useChatStore } from "@/stores/useChatStore";
 import { ThumbnailArt } from "./ThumbnailArt";
+import { TemplatePreviewDialog } from "./TemplatePreviewDialog";
 
 const TEMPLATES = templatesData as TemplateDef[];
 
@@ -40,6 +41,7 @@ const FILTERS: FilterKey[] = [
  */
 export function TemplateGallery() {
   const [filter, setFilter] = React.useState<FilterKey>("Featured");
+  const [preview, setPreview] = React.useState<TemplateDef | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const filtered = React.useMemo(() => {
@@ -138,7 +140,7 @@ export function TemplateGallery() {
             <button
               key={t.id}
               type="button"
-              onClick={() => handlePick(t)}
+              onClick={() => setPreview(t)}
               className={cn(
                 "w-[145px] h-[130px] shrink-0",
                 "rounded-[10px] border border-ws-border bg-card-ws",
@@ -155,6 +157,13 @@ export function TemplateGallery() {
           ))}
         </div>
       </div>
+
+      <TemplatePreviewDialog
+        template={preview}
+        open={!!preview}
+        onOpenChange={(v) => !v && setPreview(null)}
+        onUse={handlePick}
+      />
     </div>
   );
 }

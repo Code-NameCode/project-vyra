@@ -10,19 +10,51 @@ export function ChatView({ tabId }: { tabId: string }) {
   const conv = useChatStore((s) => s.conversations[tabId]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // whether the user is currently pinned to the bottom (so we don't fight
+  // someone who scrolled up to read earlier output)
+  const atBottomRef = useRef(true);
 
-  // Trigger auto-scroll when messages change, content grows, or steps update.
   const lastLen =
     conv && conv.messages.length > 0
       ? conv.messages[conv.messages.length - 1].content.length
       : 0;
   const stepCount = conv?.steps.length ?? 0;
   const lastStepStatus = conv?.steps[conv.steps.length - 1]?.status;
+  const streaming = !!conv?.streaming;
 
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
+
+  // While streaming, run a rAF loop that keeps the view pinned to the bottom
+  // (instant per-frame scroll — smoother than queuing smooth-scroll animations
+  // on every token). Stops if the user scrolled up.
+  useEffect(() => {
+    if (!streaming) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let raf = 0;
+    const tick = () => {
+      if (atBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [streaming]);
+
+  // On new messages / steps / tab switch, jump to the bottom if the user is
+  // already near the bottom.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (atBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [conv?.messages.length, lastLen, stepCount, lastStepStatus, tabId]);
 
   if (!conv || conv.messages.length === 0) {
@@ -56,6 +88,7 @@ export function ChatView({ tabId }: { tabId: string }) {
     <div className="flex flex-col h-full">
       <div
         ref={scrollRef}
+        onScroll={handleScroll}
         className="flex-1 overflow-y-auto ws-scroll"
       >
         <div className="mx-auto w-full max-w-[820px] px-4 py-6 flex flex-col gap-5 ws-fade-in">

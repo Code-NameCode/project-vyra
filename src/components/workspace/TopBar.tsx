@@ -20,12 +20,12 @@ export function TopBar() {
   const newChatTab = useAppStore((s) => s.newChatTab);
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 bg-page px-2.5">
+    <header className="flex h-14 shrink-0 items-center gap-2 min-[640px]:gap-3 bg-page px-2.5">
       {/* Segmented Code | Chat toggle pill */}
       <div
         role="group"
         aria-label="Workspace mode"
-        className="flex shrink-0 items-center gap-1 rounded-[8px] border border-ws-border bg-surface p-1"
+        className="flex shrink-0 items-center gap-1 rounded-[8px] border border-ws-border bg-surface p-1 max-[639px]:p-0.5"
       >
         <ToggleButton
           active={mode === "code"}
@@ -119,15 +119,17 @@ function ToggleButton({ active, onClick, label, children }: ToggleButtonProps) {
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      aria-label={label}
+      title={label}
       className={cn(
-        "focus-ring flex h-7 items-center gap-1.5 rounded-[6px] px-2.5 text-[13px] font-medium transition-colors duration-150",
+        "focus-ring flex h-7 items-center gap-1.5 rounded-[6px] px-2.5 max-[639px]:px-2 text-[13px] font-medium transition-colors duration-150",
         active
           ? "bg-accent-fill text-white"
           : "text-ws-secondary hover:text-foreground"
       )}
     >
       {children}
-      {label}
+      <span className="hidden min-[640px]:inline">{label}</span>
     </button>
   );
 }

@@ -549,7 +549,7 @@ export function Composer({ tabId }: { tabId: string }) {
       {slashVisible && (
         <div
           className={cn(
-            "absolute bottom-full mb-2 left-0 w-[300px] z-30",
+            "absolute bottom-full mb-2 left-0 w-[280px] max-w-[calc(100vw-2rem)] z-30",
             "rounded-[12px] border border-ws-border bg-popover p-1.5 ws-fade-in",
             "shadow-2xl max-h-[260px] overflow-y-auto ws-scroll"
           )}
@@ -595,7 +595,7 @@ export function Composer({ tabId }: { tabId: string }) {
       {atVisible && (
         <div
           className={cn(
-            "absolute bottom-full mb-2 left-0 w-[320px] z-30",
+            "absolute bottom-full mb-2 left-0 w-[280px] max-w-[calc(100vw-2rem)] z-30",
             "rounded-[12px] border border-ws-border bg-popover p-1.5 ws-fade-in",
             "shadow-2xl max-h-[280px] overflow-y-auto ws-scroll"
           )}
@@ -660,7 +660,7 @@ export function Composer({ tabId }: { tabId: string }) {
                 />
                 <span
                   className={cn(
-                    "truncate",
+                    "truncate hidden min-[640px]:inline",
                     !activeProject && "text-ws-secondary"
                   )}
                 >
@@ -841,8 +841,10 @@ export function Composer({ tabId }: { tabId: string }) {
                     type="button"
                     onClick={() => setBuildMode(mode)}
                     aria-pressed={active}
+                    aria-label={mode === "plan" ? "Plan" : "Build"}
+                    title={mode === "plan" ? "Plan" : "Build"}
                     className={cn(
-                      "inline-flex items-center gap-1 h-7 px-2.5 rounded-[6px]",
+                      "inline-flex items-center gap-1 h-7 px-2.5 max-[639px]:px-2 rounded-[6px]",
                       "text-[12px] font-medium transition-colors focus-ring",
                       active
                         ? "bg-accent-fill text-white"
@@ -850,7 +852,9 @@ export function Composer({ tabId }: { tabId: string }) {
                     )}
                   >
                     <ModeIcon className="size-3.5" />
-                    {mode === "plan" ? "Plan" : "Build"}
+                    <span className="hidden min-[640px]:inline">
+                      {mode === "plan" ? "Plan" : "Build"}
+                    </span>
                   </button>
                 );
               })}
@@ -863,7 +867,7 @@ export function Composer({ tabId }: { tabId: string }) {
                   type="button"
                   aria-label="Pick agent"
                   className={cn(
-                    "inline-flex items-center gap-1.5 h-8 px-2.5",
+                    "inline-flex items-center gap-1.5 h-8 px-2.5 max-[639px]:px-2",
                     "rounded-[8px] border border-ws-border bg-card-ws",
                     "text-[12px] text-foreground hover:bg-hover",
                     "transition-colors focus-ring"
@@ -872,7 +876,7 @@ export function Composer({ tabId }: { tabId: string }) {
                   {React.createElement(agentIcon(activeAgent?.icon), {
                     className: "size-3.5 text-accent-hi",
                   })}
-                  <span className="truncate max-w-[120px]">
+                  <span className="truncate max-w-[120px] hidden min-[640px]:inline">
                     {agentTriggerName}
                   </span>
                   <ChevronDown className="size-3 text-ws-secondary shrink-0" />
@@ -882,7 +886,7 @@ export function Composer({ tabId }: { tabId: string }) {
                 align="start"
                 sideOffset={6}
                 className={cn(
-                  "w-[300px] p-1 rounded-[10px]",
+                  "w-[280px] max-w-[calc(100vw-2rem)] p-1 rounded-[10px]",
                   "bg-popover border border-ws-border"
                 )}
               >

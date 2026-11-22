@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Boxes, CircleHelp, Gift, Home, Layers, LayoutGrid, Settings } from "lucide-react";
+import { Boxes, CircleHelp, Home, Layers, LayoutGrid, Settings } from "lucide-react";
 import { useAppStore } from "@/stores/useAppStore";
 import type { RailPage } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -23,8 +23,8 @@ interface RailItemDef {
 
 /**
  * IconRail — far-left 66px vertical rail inside the main container.
- * Top→bottom: Home, Sessions, Templates, Extensions, Settings (opens modal),
- * Gifts. Bottom: Help + user avatar.
+ * Top→bottom: Home, Sessions, Templates, Extensions, Settings (opens modal).
+ * Bottom: Help + user avatar.
  */
 export function IconRail() {
   const railPage = useAppStore((s) => s.railPage);
@@ -37,7 +37,6 @@ export function IconRail() {
     { key: "templates", label: "Templates", icon: LayoutGrid, page: "templates" },
     { key: "extensions", label: "Extensions", icon: Boxes, page: "extensions" },
     { key: "settings", label: "Settings", icon: Settings, action: () => setSettingsOpen(true) },
-    { key: "gifts", label: "Gifts", icon: Gift, page: "gifts" },
   ];
 
   return (

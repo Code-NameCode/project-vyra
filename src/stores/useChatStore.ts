@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { uid } from "@/lib/id";
 import { readSSE } from "@/lib/streaming";
 import type {
@@ -36,6 +37,7 @@ function emptyWorkspace(): Workspace {
 function emptyConversation(tabId: string, modelId: string): Conversation {
   return {
     tabId,
+    title: "",
     messages: [],
     steps: [],
     streaming: false,
@@ -43,6 +45,7 @@ function emptyConversation(tabId: string, modelId: string): Conversation {
     composerDraft: "",
     workspace: emptyWorkspace(),
     started: false,
+    updatedAt: Date.now(),
   };
 }
 
@@ -69,7 +72,8 @@ interface ChatState {
   recordTerminal: (tabId: string, command: string, output: string) => void;
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(
+  persist((set, get) => ({
   conversations: {},
 
   ensure: (tabId, modelId) => {
@@ -153,9 +157,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
-    // record streak for today
-    account.recordStreak();
-
     // ensure conversation + push user message
     get().ensure(tabId, modelId);
     const userMsg: ChatMessage = {
@@ -184,6 +185,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
             streaming: true,
             composerDraft: "",
             modelId,
+            title: conv.title || trimmed.slice(0, 40),
+            updatedAt: Date.now(),
             // reset step cards for the new turn (avoids duplicate step ids
             // across turns; only the current run's steps are shown)
             steps: [],
@@ -440,4 +443,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       };
     }),
-}));
+  }),
+    {
+      name: "forge-conversations",
+      partialize: (s) => ({ conversations: s.conversations }),
+      onRehydrateStorage: () => ({
+        onRehydrate: (state) => {
+          if (!state) return;
+          // a conversation that was mid-stream when the page closed is
+          // treated as stopped; running steps are marked done.
+          for (const id of Object.keys(state.conversations)) {
+            const c = state.conversations[id];
+            c.streaming = false;
+            if (!c.title) c.title = "";
+            if (!c.updatedAt) c.updatedAt = Date.now();
+            c.steps = c.steps.map((st) =>
+              st.status === "running" ? { ...st, status: "done" } : st
+            );
+            c.messages = c.messages.map((m) =>
+              m.streaming ? { ...m, streaming: false } : m
+            );
+          }
+        },
+      }),
+    }
+  )
+);

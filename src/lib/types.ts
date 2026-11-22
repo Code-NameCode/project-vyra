@@ -7,8 +7,7 @@ export type RailPage =
   | "sessions"
   | "templates"
   | "extensions"
-  | "settings"
-  | "gifts";
+  | "settings";
 
 export type TabType = "chat" | "project";
 
@@ -93,6 +92,7 @@ export interface Workspace {
 
 export interface Conversation {
   tabId: string;
+  title: string;
   messages: ChatMessage[];
   steps: AgentStep[];
   streaming: boolean;
@@ -100,6 +100,7 @@ export interface Conversation {
   composerDraft: string;
   workspace: Workspace;
   started: boolean;
+  updatedAt: number;
 }
 
 export interface Project {

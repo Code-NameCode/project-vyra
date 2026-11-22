@@ -2,14 +2,13 @@
 
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/useAppStore";
-import { StreakBanner } from "./StreakBanner";
 import { NewProjectDropdown } from "./NewProjectDropdown";
 import { Composer } from "./Composer";
 import { TemplateGallery } from "./TemplateGallery";
 
 /**
  * HeroScreen — the centered home/hero column shown when a chat has not started.
- * Composes StreakBanner, heading, NewProjectDropdown, Composer, TemplateGallery.
+ * Composes heading, NewProjectDropdown, Composer, TemplateGallery.
  * In chat mode, hides the project dropdown and template gallery.
  */
 export function HeroScreen({ tabId }: { tabId: string }) {
@@ -22,8 +21,6 @@ export function HeroScreen({ tabId }: { tabId: string }) {
         "ws-fade-in"
       )}
     >
-      <StreakBanner />
-
       <h1 className="text-[28px] font-semibold tracking-tight text-foreground text-center">
         What can I help build?
       </h1>

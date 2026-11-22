@@ -156,8 +156,12 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (data: unknown) => {
-        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-        controller.enqueue(encoder.encode(encodeSSE(data)));
+        if (signal?.aborted) return;
+        try {
+          controller.enqueue(encoder.encode(encodeSSE(data)));
+        } catch {
+          // stream closed/errored (client disconnect) — stop silently
+        }
       };
 
       try {
@@ -243,7 +247,11 @@ export async function POST(req: NextRequest) {
           }
         }
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          /* already closed/errored */
+        }
       }
     },
   });

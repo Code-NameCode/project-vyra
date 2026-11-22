@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { uid } from "@/lib/id";
 import type { AppMode, RailPage, RightPanelView, Tab, TabType } from "@/lib/types";
 
@@ -16,6 +17,7 @@ interface AppState {
   activeTabId: string;
   setActiveTab: (id: string) => void;
   openTab: (tab: Tab) => void;
+  openSession: (sessionId: string, title: string) => void;
   closeTab: (id: string) => void;
   newChatTab: () => string;
   renameTab: (id: string, title: string) => void;
@@ -58,85 +60,128 @@ function makeTab(type: TabType = "chat", title = "New chat"): Tab {
   return { id: uid("tab"), title, type, createdAt: Date.now() };
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
-  mode: "code",
-  setMode: (m) => set({ mode: m }),
-  toggleMode: () => set((s) => ({ mode: s.mode === "code" ? "chat" : "code" })),
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
+      mode: "code",
+      setMode: (m) => set({ mode: m }),
+      toggleMode: () => set((s) => ({ mode: s.mode === "code" ? "chat" : "code" })),
 
-  railPage: "home",
-  setRailPage: (p) => set({ railPage: p }),
+      railPage: "home",
+      setRailPage: (p) => set({ railPage: p }),
 
-  tabs: [makeTab()],
-  activeTabId: "",
-  setActiveTab: (id) => set({ activeTabId: id }),
-  openTab: (tab) =>
-    set((s) => ({
-      tabs: [...s.tabs, tab],
-      activeTabId: tab.id,
-    })),
-  closeTab: (id) =>
-    set((s) => {
-      const idx = s.tabs.findIndex((t) => t.id === id);
-      const next = s.tabs.filter((t) => t.id !== id);
-      let active = s.activeTabId;
-      if (id === s.activeTabId) {
-        const fallback = next[idx] ?? next[idx - 1] ?? next[0];
-        active = fallback ? fallback.id : "";
-      }
-      if (next.length === 0) {
-        const fresh = makeTab();
-        return { tabs: [fresh], activeTabId: fresh.id };
-      }
-      return { tabs: next, activeTabId: active };
+      tabs: [makeTab()],
+      activeTabId: "",
+      setActiveTab: (id) => set({ activeTabId: id, railPage: "home" }),
+      openTab: (tab) =>
+        set((s) => ({
+          tabs: s.tabs.some((t) => t.id === tab.id) ? s.tabs : [...s.tabs, tab],
+          activeTabId: tab.id,
+          railPage: "home",
+        })),
+      // open (or focus) a tab backed by an existing persisted session
+      openSession: (sessionId, title) =>
+        set((s) => {
+          const existing = s.tabs.find((t) => t.id === sessionId);
+          if (existing) {
+            return { activeTabId: existing.id, railPage: "home" as RailPage };
+          }
+          const tab: Tab = {
+            id: sessionId,
+            title: title || "New chat",
+            type: "chat",
+            createdAt: Date.now(),
+          };
+          return { tabs: [...s.tabs, tab], activeTabId: tab.id, railPage: "home" };
+        }),
+      closeTab: (id) =>
+        set((s) => {
+          const idx = s.tabs.findIndex((t) => t.id === id);
+          const next = s.tabs.filter((t) => t.id !== id);
+          let active = s.activeTabId;
+          if (id === s.activeTabId) {
+            const fallback = next[idx] ?? next[idx - 1] ?? next[0];
+            active = fallback ? fallback.id : "";
+          }
+          if (next.length === 0) {
+            const fresh = makeTab();
+            return { tabs: [fresh], activeTabId: fresh.id };
+          }
+          return { tabs: next, activeTabId: active };
+        }),
+      newChatTab: () => {
+        const t = makeTab();
+        set((s) => ({
+          tabs: [...s.tabs, t],
+          activeTabId: t.id,
+          railPage: "home",
+          mode: s.mode,
+        }));
+        return t.id;
+      },
+      renameTab: (id, title) =>
+        set((s) => ({
+          tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
+        })),
+
+      sidebarCollapsed: false,
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
+
+      rightPanelOpen: false,
+      toggleRightPanel: () =>
+        set((s) => ({
+          rightPanelOpen: !s.rightPanelOpen,
+          rightTabOpen: !s.rightPanelOpen,
+        })),
+      setRightPanelOpen: (v) => set({ rightPanelOpen: v, rightTabOpen: v }),
+
+      rightPanelView: null,
+      setRightPanelView: (v) => set({ rightPanelView: v }),
+
+      rightTabOpen: false,
+      setRightTabOpen: (v) => set({ rightTabOpen: v }),
+
+      searchOpen: false,
+      setSearchOpen: (v) => set({ searchOpen: v }),
+      settingsOpen: false,
+      setSettingsOpen: (v) => set({ settingsOpen: v }),
+      upgradeOpen: false,
+      setUpgradeOpen: (v) => set({ upgradeOpen: v }),
+      inviteOpen: false,
+      setInviteOpen: (v) => set({ inviteOpen: v }),
+      hoursExhaustedOpen: false,
+      setHoursExhaustedOpen: (v) => set({ hoursExhaustedOpen: v }),
+
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: (v) => set({ mobileSidebarOpen: v }),
+      mobileRightOpen: false,
+      setMobileRightOpen: (v) => set({ mobileRightOpen: v }),
     }),
-  newChatTab: () => {
-    const t = makeTab();
-    set((s) => ({ tabs: [...s.tabs, t], activeTabId: t.id, mode: s.mode }));
-    return t.id;
-  },
-  renameTab: (id, title) =>
-    set((s) => ({
-      tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
-    })),
+    {
+      name: "forge-app",
+      partialize: (s) => ({
+        mode: s.mode,
+        railPage: s.railPage,
+        tabs: s.tabs,
+        activeTabId: s.activeTabId,
+        sidebarCollapsed: s.sidebarCollapsed,
+        rightPanelOpen: s.rightPanelOpen,
+        rightPanelView: s.rightPanelView,
+        rightTabOpen: s.rightTabOpen,
+      }),
+    }
+  )
+);
 
-  sidebarCollapsed: false,
-  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-  setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
-
-  rightPanelOpen: false,
-  toggleRightPanel: () =>
-    set((s) => ({
-      rightPanelOpen: !s.rightPanelOpen,
-      rightTabOpen: !s.rightPanelOpen,
-    })),
-  setRightPanelOpen: (v) => set({ rightPanelOpen: v, rightTabOpen: v }),
-
-  rightPanelView: null,
-  setRightPanelView: (v) => set({ rightPanelView: v }),
-
-  rightTabOpen: false,
-  setRightTabOpen: (v) => set({ rightTabOpen: v }),
-
-  searchOpen: false,
-  setSearchOpen: (v) => set({ searchOpen: v }),
-  settingsOpen: false,
-  setSettingsOpen: (v) => set({ settingsOpen: v }),
-  upgradeOpen: false,
-  setUpgradeOpen: (v) => set({ upgradeOpen: v }),
-  inviteOpen: false,
-  setInviteOpen: (v) => set({ inviteOpen: v }),
-  hoursExhaustedOpen: false,
-  setHoursExhaustedOpen: (v) => set({ hoursExhaustedOpen: v }),
-
-  mobileSidebarOpen: false,
-  setMobileSidebarOpen: (v) => set({ mobileSidebarOpen: v }),
-  mobileRightOpen: false,
-  setMobileRightOpen: (v) => set({ mobileRightOpen: v }),
-}));
-
-// initialize active tab after creation
-if (useAppStore.getState().tabs.length && !useAppStore.getState().activeTabId) {
-  useAppStore.setState({ activeTabId: useAppStore.getState().tabs[0].id });
+// ensure there's always at least one tab and a valid active tab (handles
+// first run + rehydrated state)
+const st = useAppStore.getState();
+if (st.tabs.length === 0) {
+  const t = makeTab();
+  useAppStore.setState({ tabs: [t], activeTabId: t.id });
+} else if (!st.activeTabId || !st.tabs.some((t) => t.id === st.activeTabId)) {
+  useAppStore.setState({ activeTabId: st.tabs[0].id });
 }
 
 export { makeTab };

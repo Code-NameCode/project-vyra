@@ -6,13 +6,13 @@ import {
   ChevronRight,
   Folder,
   FolderPlus,
-  Gift,
   History,
   Hourglass,
   PanelLeftClose,
   Search,
   SquarePen,
   TrendingUp,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAppStore } from "@/stores/useAppStore";
@@ -25,13 +25,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ForgeLogo } from "./ForgeLogo";
-import { Mascot } from "./Mascot";
 
 /**
  * Sidebar — 320px (w-80) inner content panel, right of IconRail.
  * Parent layout controls collapse (conditionally renders) and mobile (Sheet).
  * This component renders header, quick actions, projects/legacy list, and
- * pinned bottom rows (invite + streak).
+ * a pinned bottom invite row.
  */
 export function Sidebar() {
   const newChatTab = useAppStore((s) => s.newChatTab);
@@ -43,17 +42,12 @@ export function Sidebar() {
   const dailyHoursMs = useAccountStore((s) => s.dailyHoursMs);
   const referralCount = useAccountStore((s) => s.referralCount);
   const referralTarget = useAccountStore((s) => s.referralTarget);
-  const streakDays = useAccountStore((s) => s.streakDays);
-  const lastStreakDate = useAccountStore((s) => s.lastStreakDate);
 
   const projects = useProjectsStore((s) => s.projects);
   const legacy = useProjectsStore((s) => s.legacy);
   const addProject = useProjectsStore((s) => s.addProject);
 
   const [legacyOpen, setLegacyOpen] = useState(false);
-
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const streakDoneToday = lastStreakDate === todayKey;
 
   return (
     <aside className="flex h-full w-80 shrink-0 flex-col border-r border-ws-border bg-surface p-3">
@@ -97,8 +91,6 @@ export function Sidebar() {
           onClick={() => setUpgradeOpen(true)}
         />
       </div>
-
-      {/* Projects section */}
       <h2 className="mt-4 mb-1 px-2 text-[12px] uppercase tracking-wide text-ws-secondary">
         Projects
       </h2>
@@ -165,49 +157,11 @@ export function Sidebar() {
           onClick={() => setInviteOpen(true)}
           className="focus-ring flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-[13px] text-foreground transition-colors duration-150 hover:bg-hover"
         >
-          <Gift className="size-4 shrink-0 text-ws-secondary" />
+          <UserPlus className="size-4 shrink-0 text-ws-secondary" />
           <span>Invite friends</span>
           <span className="ml-auto text-[12px] text-ws-secondary">
             {referralCount}/{referralTarget}
           </span>
-        </button>
-
-        <button
-          type="button"
-          title={
-            streakDoneToday
-              ? `${streakDays} day streak — keep it going`
-              : "Start your streak today"
-          }
-          onClick={() =>
-            toast.message(
-              streakDoneToday
-                ? `Streak: ${streakDays} day${streakDays === 1 ? "" : "s"} — visit daily to keep it alive.`
-                : "Send a message to start today's streak."
-            )
-          }
-          className="focus-ring flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-[13px] text-foreground transition-colors duration-150 hover:bg-hover"
-        >
-          <Mascot size={22} />
-          <span>Start a streak</span>
-          <div className="ml-auto flex items-center gap-1" aria-hidden>
-            {/* today dot — orange dashed (not done) or solid filled (done) */}
-            <span
-              className={cn(
-                "size-2.5 rounded-full",
-                streakDoneToday
-                  ? "bg-streak"
-                  : "border-2 border-dashed border-streak"
-              )}
-            />
-            {/* remaining 6 dots — dark gray rounded squares */}
-            {Array.from({ length: 6 }).map((_, i) => (
-              <span
-                key={i}
-                className="size-2.5 rounded-[3px] border border-ws-border bg-card-ws"
-              />
-            ))}
-          </div>
         </button>
       </div>
     </aside>

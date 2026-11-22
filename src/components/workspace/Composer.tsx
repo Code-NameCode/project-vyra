@@ -143,6 +143,7 @@ interface RefItem {
   icon: LucideIcon;
 }
 const EMPTY_FILES: FileNode[] = [];
+const EMPTY_SKILLS: string[] = [];
 
 /** Strip a leading `/` from a slash command label (e.g. "/review" -> "review"). */
 function stripSlash(label: string): string {
@@ -171,7 +172,7 @@ export function Composer({ tabId }: { tabId: string }) {
 
   /* ---- skills (multi-chip) ---- */
   const skills = useChatStore(
-    (s) => s.conversations[tabId]?.skills ?? []
+    (s) => s.conversations[tabId]?.skills ?? EMPTY_SKILLS
   );
   const addSkill = useChatStore((s) => s.addSkill);
   const removeSkill = useChatStore((s) => s.removeSkill);

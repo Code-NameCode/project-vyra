@@ -70,3 +70,9 @@ upload/
 
 # database backups
 db/custom.db.*-backup-*
+
+# local SQLite database (live app state — never commit)
+/db/custom.db
+/db/custom.db-journal
+/db/custom.db-wal
+/db/custom.db-shm

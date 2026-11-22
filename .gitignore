@@ -52,3 +52,21 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# local secret vault (AES-256-GCM encrypted credentials)
+.vyra/
+
+# local tool state
+.mimosa/
+.zcode/
+
+# test artifacts
+playwright-report/
+test-results/
+
+# session artifacts
+tool-results/
+upload/
+
+# database backups
+db/custom.db.*-backup-*

@@ -106,7 +106,7 @@ function CrosscutThumb() {
               height: 0,
               borderTop: "6px solid transparent",
               borderBottom: "6px solid transparent",
-              borderLeft: "9px solid #7bc65a",
+              borderLeft: "9px solid #ff8c75",
             }}
           />
         </div>
@@ -271,7 +271,7 @@ function FusionEnergyThumb() {
             cy="28"
             rx="22"
             ry="9"
-            stroke="#5a9e3f"
+            stroke="#fa3a18"
             strokeOpacity="0.35"
             strokeWidth="1"
           />
@@ -280,7 +280,7 @@ function FusionEnergyThumb() {
             cy="28"
             rx="22"
             ry="9"
-            stroke="#7bc65a"
+            stroke="#ff8c75"
             strokeOpacity="0.5"
             strokeWidth="1"
             transform="rotate(60 28 28)"
@@ -296,8 +296,8 @@ function FusionEnergyThumb() {
             transform="rotate(120 28 28)"
           />
           {/* nucleus */}
-          <circle cx="28" cy="28" r="3.5" fill="#7bc65a" />
-          <circle cx="28" cy="28" r="6" stroke="#7bc65a" strokeOpacity="0.3" />
+          <circle cx="28" cy="28" r="3.5" fill="#ff8c75" />
+          <circle cx="28" cy="28" r="6" stroke="#ff8c75" strokeOpacity="0.3" />
         </svg>
       </div>
       {/* tick marks */}
@@ -460,14 +460,14 @@ function StarterNextThumb() {
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f1310] to-[#0a0c0a]" />
       <div className="absolute inset-0 flex items-center justify-center">
         <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true">
-          <circle cx="17" cy="17" r="3" fill="#7bc65a" />
-          <ellipse cx="17" cy="17" rx="14" ry="5" stroke="#5a9e3f" strokeOpacity="0.5" />
+          <circle cx="17" cy="17" r="3" fill="#ff8c75" />
+          <ellipse cx="17" cy="17" rx="14" ry="5" stroke="#fa3a18" strokeOpacity="0.5" />
           <ellipse
             cx="17"
             cy="17"
             rx="14"
             ry="5"
-            stroke="#7bc65a"
+            stroke="#ff8c75"
             strokeOpacity="0.4"
             transform="rotate(60 17 17)"
           />

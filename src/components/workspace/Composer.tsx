@@ -256,7 +256,7 @@ export function Composer({ tabId }: { tabId: string }) {
   const stopStreaming = useChatStore((s) => s.stopStreaming);
   const clearConversation = useChatStore((s) => s.clearConversation);
 
-  /* ---- skills (multi-chip) ---- */
+  /* ---- skills (activated via slash commands) ---- */
   const skills = useChatStore(
     (s) => s.conversations[tabId]?.skills ?? EMPTY_SKILLS
   );
@@ -268,6 +268,8 @@ export function Composer({ tabId }: { tabId: string }) {
     (s) => s.conversations[tabId]?.agentId ?? ""
   );
   const setAgent = useChatStore((s) => s.setAgent);
+  const enabledAgentIds = useSettingsStore((s) => s.enabledAgentIds);
+  const detectedAgentIds = useSettingsStore((s) => s.detectedAgentIds);
 
   /* ---- Deep research mode ---- */
   const researchMode = useChatStore(
@@ -399,9 +401,19 @@ export function Composer({ tabId }: { tabId: string }) {
   }, [draft]);
 
   /* ---- slash command popup derivation ---- */
+  const folderSkills = useSettingsStore((s) => s.skills);
   const slashWithIcons = React.useMemo<SlashCommandWithIcon[]>(
-    () => SLASH_COMMANDS as SlashCommandWithIcon[],
-    []
+    () => [
+      ...(SLASH_COMMANDS as SlashCommandWithIcon[]),
+      ...folderSkills.map((sk) => ({
+        id: sk.name,
+        label: `/${sk.name}`,
+        description: sk.description || "Skill from linked folder",
+        hint: sk.name,
+        icon: "sparkles",
+      })),
+    ],
+    [folderSkills]
   );
   const isSlashDraft =
     draft.startsWith("/") &&
@@ -653,6 +665,17 @@ export function Composer({ tabId }: { tabId: string }) {
   const SendIcon = sendState === "stop" ? Square : sendState === "send" ? ArrowUp : Mic;
   const sendLabel = sendState === "stop" ? "Stop" : sendState === "send" ? "Send" : "Voice";
 
+  /* ---- agents available in the picker (detected + enabled in settings) ---- */
+  const availableAgents = React.useMemo(() => {
+    const enabled =
+      enabledAgentIds.length > 0
+        ? enabledAgentIds
+        : detectedAgentIds.length > 0
+          ? detectedAgentIds
+          : AGENTS.filter((a) => a.detected).map((a) => a.id);
+    return AGENTS.filter((a) => enabled.includes(a.id));
+  }, [enabledAgentIds, detectedAgentIds]);
+
   /* ---- active agent (for the trigger chip) ---- */
   const activeAgent: AgentDef | undefined = agentId
     ? AGENTS.find((a) => a.id === agentId)
@@ -849,27 +872,29 @@ export function Composer({ tabId }: { tabId: string }) {
           </DropdownMenu>
         </div>
 
-        {/* skills chip row (above the textarea, only when skills exist) */}
+        {/* active skill chips (skills the user applied via slash commands) */}
         {skills.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2 ws-fade-in">
             {skills.map((skillId) => {
               const cmd = SLASH_COMMANDS.find((c) => c.id === skillId);
+              const def = folderSkills.find((s) => s.name === skillId);
               const Icon = cmd ? skillIcon(cmd.icon) : Sparkles;
               const label = cmd ? stripSlash(cmd.label) : skillId;
               return (
                 <span
                   key={skillId}
+                  title={def?.description ?? cmd?.description}
                   className={cn(
                     "inline-flex items-center gap-1 rounded-full",
-                    "border border-ws-border bg-hover pl-2 pr-1 py-0.5",
-                    "text-[12px] text-foreground"
+                    "border border-accent-fill/30 bg-accent-fill/10 pl-2 pr-1 py-0.5",
+                    "text-[12px] text-accent-hi"
                   )}
                 >
-                  <Icon className="size-3 text-accent-hi" />
+                  <Icon className="size-3" />
                   {label}
                   <button
                     type="button"
-                    aria-label="Remove skill"
+                    aria-label={`Remove ${label} skill`}
                     onClick={() => removeSkill(tabId, skillId)}
                     className={cn(
                       "inline-flex items-center justify-center size-4 rounded-full",
@@ -885,7 +910,7 @@ export function Composer({ tabId }: { tabId: string }) {
           </div>
         )}
 
-        {/* deep research indicator (below skills chips, above the textarea) */}
+        {/* deep research indicator (above the textarea) */}
         {researchMode && !streaming && (
           <div
             className={cn(
@@ -942,7 +967,7 @@ export function Composer({ tabId }: { tabId: string }) {
           onChange={(e) => setComposerDraft(tabId, e.target.value)}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="Ask Goodstuff-Agent... Use / for commands"
+          placeholder="Ask Goodstuff-VYRA... Use / for commands"
           className={cn(
             "bg-transparent border-0 resize-none p-0 m-0",
             "text-[15px] leading-[1.55] text-foreground",
@@ -1099,29 +1124,26 @@ export function Composer({ tabId }: { tabId: string }) {
                 </button>
 
                 <div className="text-[11px] uppercase tracking-wide text-ws-secondary px-2.5 pt-2 pb-1">
-                  Detected agents
+                  Enabled agents
                 </div>
 
-                {AGENTS.map((a) => {
+                {availableAgents.length === 0 ? (
+                  <div className="px-2.5 py-2 text-[12px] text-ws-secondary">
+                    No agents enabled. Detect and enable agents in Settings →
+                    Agents.
+                  </div>
+                ) : null}
+
+                {availableAgents.map((a) => {
                   const Icon = agentIcon(a.icon);
                   const selected = a.id === agentId;
                   return (
                     <div
                       key={a.id}
-                      title={
-                        a.detected ? undefined : "Not detected on this machine"
-                      }
-                      onClick={
-                        a.detected
-                          ? () => handleAgentSelect(a.id, a.name)
-                          : undefined
-                      }
+                      onClick={() => handleAgentSelect(a.id, a.name)}
                       className={cn(
                         "rounded-[8px] px-2.5 py-2 flex items-start gap-2",
-                        "transition-colors",
-                        a.detected
-                          ? "hover:bg-hover cursor-pointer"
-                          : "opacity-50",
+                        "transition-colors hover:bg-hover cursor-pointer",
                         selected && "bg-hover"
                       )}
                     >
@@ -1143,10 +1165,6 @@ export function Composer({ tabId }: { tabId: string }) {
                       </div>
                       {selected ? (
                         <Check className="size-3.5 text-accent-hi ml-auto shrink-0" />
-                      ) : !a.detected ? (
-                        <span className="ml-auto text-[10px] text-ws-disabled border border-ws-border rounded-full px-1.5 py-0.5 shrink-0">
-                          Not detected
-                        </span>
                       ) : null}
                     </div>
                   );

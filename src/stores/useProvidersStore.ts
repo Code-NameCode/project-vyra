@@ -17,6 +17,16 @@ interface ProvidersState {
   toggleModelHidden: (providerId: string, modelId: string) => void;
   detectProviderModels: (providerId: string, hideAll?: boolean) => Promise<ProviderModel[]>;
   detectOllama: (baseUrl?: string) => Promise<ProviderModel[]>;
+  importProviders: (
+    items: {
+      id: string;
+      name: string;
+      sourceCli: string;
+      baseUrl: string;
+      models: string[];
+      hasApiKey: boolean;
+    }[]
+  ) => number;
 }
 
 /** Build the unified model id for a provider model. */
@@ -91,11 +101,13 @@ const DEFAULT_PROVIDERS: Provider[] = [
     "llama-3.1-8b-instant",
     "mixtral-8x7b-32768",
   ]),
-  seedProvider("zai", "Z.ai", "openai", "https://api.z.ai/api/paas/v4", [
-    "glm-4.6",
-    "glm-4.5-air",
-    "glm-4v-flash",
-  ]),
+  seedProvider(
+    "zai",
+    "Z.ai (Coding Plan)",
+    "openai",
+    "https://api.z.ai/api/coding/paas/v4",
+    ["glm-5.3", "glm-5.3-flash"]
+  ),
   seedProvider("deepseek", "DeepSeek", "openai", "https://api.deepseek.com", [
     "deepseek-chat",
     "deepseek-reasoner",
@@ -180,8 +192,9 @@ export const useProvidersStore = create<ProvidersState>()(
         try {
           const params = new URLSearchParams({
             baseUrl: provider.baseUrl,
-            apiKey: provider.apiKey,
             type: provider.type,
+            providerId: provider.id,
+            providerName: provider.name,
           });
           const res = await fetch(`/api/models?${params.toString()}`);
           const data = (await res.json()) as {
@@ -190,6 +203,13 @@ export const useProvidersStore = create<ProvidersState>()(
             error: string | null;
           };
           const prev = provider.models;
+          const identity =
+            `${provider.baseUrl} ${provider.id} ${provider.name}`.toLowerCase();
+          const isZaiCodingPlan =
+            identity.includes("z.ai") ||
+            identity.includes("zai") ||
+            identity.includes("xzai") ||
+            identity.includes("glm");
           // New models start hidden so the user curates which to show. Existing
           // models keep their hidden flag (so a refresh preserves your choices).
           // `hideAll` (used on connect) hides every fetched model.
@@ -198,7 +218,13 @@ export const useProvidersStore = create<ProvidersState>()(
             return {
               name,
               id: modelIdFor(providerId, name),
-              hidden: hideAll ? true : existing ? existing.hidden : true,
+              hidden: isZaiCodingPlan
+                ? false
+                : hideAll
+                  ? true
+                  : existing
+                    ? existing.hidden
+                    : true,
             };
           });
           get().setProviderModels(providerId, models);
@@ -206,6 +232,48 @@ export const useProvidersStore = create<ProvidersState>()(
         } finally {
           set({ detecting: false });
         }
+      },
+
+      importProviders: (items) => {
+        let added = 0;
+        set((s) => {
+          const providers = [...s.providers];
+          for (const item of items) {
+            if (!item.models.length && !item.baseUrl) continue;
+            const existingIdx = providers.findIndex((p) => p.id === item.id);
+            const models: ProviderModel[] = item.models.map((name) => ({
+              name,
+              id: modelIdFor(item.id, name),
+              hidden: false,
+            }));
+            if (existingIdx >= 0) {
+              const existing = providers[existingIdx];
+              const merged = new Map<string, ProviderModel>();
+              for (const m of existing.models) merged.set(m.name, m);
+              for (const m of models) merged.set(m.name, { ...m, hidden: false });
+              providers[existingIdx] = {
+                ...existing,
+                name: item.name || existing.name,
+                baseUrl: item.baseUrl || existing.baseUrl,
+                apiKey: existing.apiKey,
+                models: Array.from(merged.values()),
+              };
+            } else {
+              providers.push({
+                id: item.id,
+                name: item.name,
+                type: "openai",
+                baseUrl: item.baseUrl,
+                apiKey: "",
+                enabled: true,
+                models,
+              });
+              added++;
+            }
+          }
+          return { providers };
+        });
+        return added;
       },
 
       detectOllama: async (baseUrl) => {
@@ -233,18 +301,63 @@ export const useProvidersStore = create<ProvidersState>()(
     }),
     {
       name: "forge-providers",
+      partialize: (state) => ({
+        ...state,
+        providers: state.providers.map(({ apiKey: _apiKey, ...provider }) => provider),
+      }),
       merge: (persisted, current) => {
         const p = persisted as Partial<ProvidersState> | undefined;
         if (!p || !Array.isArray(p.providers)) return current as ProvidersState;
         // normalize persisted providers (ensure model ids + hidden flag)
-        const persistedNorm = p.providers.map((prov) => ({
-          ...prov,
-          models: (prov.models || []).map((m) => ({
-            name: m.name,
-            id: m.id || modelIdFor(prov.id, m.name),
-            hidden: m.hidden,
-          })),
-        }));
+        const isZai = (pr: Provider) => {
+          const s = `${pr.baseUrl} ${pr.id} ${pr.name}`.toLowerCase();
+          return (
+            s.includes("z.ai") ||
+            s.includes("zai") ||
+            s.includes("xzai") ||
+            s.includes("glm")
+          );
+        };
+        const persistedNorm = p.providers.map((prov) => {
+          const base = {
+            ...prov,
+            apiKey: "",
+            models: (prov.models || []).map((m) => ({
+              name: m.name,
+              id: m.id || modelIdFor(prov.id, m.name),
+              hidden: m.hidden,
+            })),
+          };
+          // Migrate existing Z.ai providers to the GLM Coding Plan endpoint.
+          if (isZai(base) && base.baseUrl.includes("api.z.ai")) {
+            const codingBase =
+              base.baseUrl.includes("/coding/") ||
+              base.baseUrl.endsWith("/api/v1") ||
+              base.baseUrl.includes("/api/anthropic")
+                ? base.baseUrl
+                : "https://api.z.ai/api/coding/paas/v4";
+            const keep = new Set(["glm-5.3", "glm-5.3-flash"]);
+            const models = base.models.filter((m) => keep.has(m.name));
+            for (const name of keep) {
+              if (!models.some((m) => m.name === name)) {
+                models.push({
+                  name,
+                  id: modelIdFor(base.id, name),
+                  hidden: false,
+                });
+              }
+            }
+            return {
+              ...base,
+              name: base.name.toLowerCase().includes("coding")
+                ? base.name
+                : "Z.ai (Coding Plan)",
+              baseUrl: codingBase,
+              models: models.map((m) => ({ ...m, hidden: false })),
+            };
+          }
+          return base;
+        });
         // start from defaults, override with persisted (by id) so new default
         // providers appear for existing users while preserving their edits;
         // then append any user-added providers not in defaults.

@@ -81,6 +81,7 @@ function DetailHeader({
     const v = draftName.trim();
     if (v && v !== project.name) {
       renameProject(project.id, v);
+      void fetch(`/api/projects/${encodeURIComponent(project.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: v }) });
       toast.success("Renamed");
     } else {
       setDraftName(project.name);
@@ -95,6 +96,7 @@ function DetailHeader({
 
   const handleDelete = () => {
     removeProject(project.id);
+    void fetch(`/api/projects/${encodeURIComponent(project.id)}`, { method: "DELETE" });
     setDeleteOpen(false);
     onDeleted();
     toast.success("Project deleted");
@@ -155,7 +157,8 @@ function DetailHeader({
           <DialogHeader>
             <DialogTitle>Delete project?</DialogTitle>
             <DialogDescription>
-              This permanently removes {project.name} and its workspace.
+              This removes {project.name} from VYRA. The underlying workspace
+              folder will not be deleted.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -317,15 +320,39 @@ function RulesTab({ project }: { project: Project }) {
   );
 }
 
+function ProjectDataTab({ project, kind }: { project: Project; kind: "overview" | "sessions" | "executions" | "changes" | "git" | "settings" }) {
+  const [data, setData] = useState<any>(null);
+  const [selectedExecution, setSelectedExecution] = useState<any>(null);
+  useEffect(() => {
+    const endpoint = kind === "overview" ? `/api/projects/${encodeURIComponent(project.id)}/overview` : kind === "sessions" ? `/api/projects/${encodeURIComponent(project.id)}/conversations?take=100` : kind === "executions" ? `/api/projects/${encodeURIComponent(project.id)}/executions?take=100` : kind === "changes" ? `/api/projects/${encodeURIComponent(project.id)}/changes?take=200` : kind === "git" ? `/api/projects/${encodeURIComponent(project.id)}/git` : null;
+    if (!endpoint) return;
+    fetch(endpoint).then((response) => response.ok ? response.json() : null).then(setData).catch(() => setData({ error: "Unable to load this section" }));
+  }, [kind, project.id]);
+
+  if (kind === "settings") return <RulesTab project={project} />;
+  if (!data) return <div className="flex-1 grid place-items-center text-[13px] text-ws-secondary">Loading {kind}…</div>;
+  if (data.error) return <div className="flex-1 grid place-items-center text-[13px] text-red-400">{data.error}</div>;
+  if (kind === "overview") return <div className="flex-1 overflow-y-auto ws-scroll p-5"><div className="grid grid-cols-2 min-[640px]:grid-cols-4 gap-3">{[["Sessions", data.stats?.conversations], ["Executions", data.stats?.executions], ["Changes", data.stats?.changes], ["Workspace", project.directory || "Not configured"]].map(([label, value]) => <div key={String(label)} className="rounded-[10px] border border-ws-border bg-card-ws p-3"><div className="text-[11px] uppercase tracking-wide text-ws-disabled">{label}</div><div className="mt-1 text-[15px] text-foreground truncate">{String(value ?? "—")}</div></div>)}</div><div className="mt-5 text-[13px] font-medium text-foreground">Recent activity</div><div className="mt-2 flex flex-col gap-2">{(data.recentExecutions || []).map((item: any) => <div key={item.id} className="rounded-[8px] border border-ws-border px-3 py-2 text-[12px]"><span className="text-foreground">{item.status}</span><span className="ml-2 text-ws-secondary">{item.id}</span></div>)}{!(data.recentExecutions || []).length && <span className="text-ws-secondary">No persisted activity yet.</span>}</div></div>;
+  if (kind === "sessions") return <div className="flex-1 overflow-y-auto ws-scroll p-5 flex flex-col gap-2">{(data.conversations || []).map((session: any) => <button key={session.id} type="button" onClick={() => useAppStore.getState().openSession(session.id, session.title || "New chat")} className="text-left rounded-[8px] border border-ws-border px-3 py-2 hover:bg-hover"><div className="text-[13px] text-foreground">{session.title || "New chat"}</div><div className="text-[11px] text-ws-secondary">{session.modelId || "No model"} · {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}</div></button>)}{!(data.conversations || []).length && <span className="text-[13px] text-ws-secondary">No sessions in this project.</span>}</div>;
+  if (kind === "executions") return <div className="flex-1 overflow-y-auto ws-scroll p-5 flex flex-col gap-2">{(data.executions || []).map((execution: any) => <button key={execution.id} type="button" onClick={() => fetch(`/api/executions/${encodeURIComponent(execution.id)}`).then((r) => r.json()).then((payload) => setSelectedExecution(payload.execution))} className="text-left rounded-[8px] border border-ws-border px-3 py-2 hover:bg-hover"><div className="flex justify-between gap-3 text-[13px]"><span className="text-foreground">{execution.id}</span><span className="text-ws-secondary">{execution.status}</span></div><div className="text-[11px] text-ws-secondary">{execution.conversation?.title || "Unlinked session"} · {new Date(execution.createdAt).toLocaleString()}</div></button>)}{selectedExecution && <pre className="mt-2 max-h-64 overflow-auto rounded-[8px] bg-card-ws border border-ws-border p-3 text-[11px] text-ws-secondary">{JSON.stringify(selectedExecution.eventsLog || [], null, 2)}</pre>}</div>;
+  if (kind === "changes") return <div className="flex-1 overflow-y-auto ws-scroll p-5 flex flex-col gap-2">{(data.changes || []).map((change: any) => <details key={change.id} className="rounded-[8px] border border-ws-border px-3 py-2"><summary className="cursor-pointer text-[13px] text-foreground">{change.path} <span className="ml-2 text-ws-secondary">{change.status}</span></summary><pre className="mt-2 overflow-auto text-[11px] text-ws-secondary">{change.diff}</pre><div className="mt-2 text-[11px] text-ws-disabled">{change.executionId || "No execution"} · {change.operationStatus}</div></details>)}{!(data.changes || []).length && <span className="text-[13px] text-ws-secondary">No persisted file changes.</span>}</div>;
+  return <div className="flex-1 overflow-y-auto ws-scroll p-5">{data.available ? <><div className="text-[14px] text-foreground">Branch: {data.branch}</div><div className="mt-3 flex flex-col gap-1">{data.files?.map((file: any) => <div key={file.path} className="text-[12px] text-ws-secondary">{file.status || " "} {file.path}</div>)}</div></> : <div className="text-[13px] text-ws-secondary">Git is unavailable for this workspace.</div>}</div>;
+}
+
 /* ------------------------------------------------------------------ */
 /* ProjectsPage — full-page project manager                            */
 /* ------------------------------------------------------------------ */
 
 export function ProjectsPage() {
   const projects = useProjectsStore((s) => s.projects);
+  const hydrateProjects = useProjectsStore((s) => s.hydrateProjects);
   const addProject = useProjectsStore((s) => s.addProject);
 
   const [selectedId, setSelectedId] = useState<string>("");
+
+  useEffect(() => {
+    fetch("/api/projects?take=100").then((r) => r.ok ? r.json() : null).then((data) => { if (data?.projects) hydrateProjects(data.projects); }).catch(() => undefined);
+  }, [hydrateProjects]);
 
   // derive the effective selection: fall back to the first project when the
   // stored id is stale (e.g. after a delete) or before any selection.
@@ -423,11 +450,15 @@ export function ProjectsPage() {
                 onDeleted={() => setSelectedId("")}
               />
               <Tabs
-                defaultValue="files"
+                defaultValue="overview"
                 className="flex-1 min-h-0 flex flex-col gap-0"
               >
                 <div className="shrink-0 border-b border-ws-border px-5">
                   <TabsList className="bg-transparent h-9 p-0 gap-4 rounded-none">
+                    <TabsTrigger value="overview" className="text-[13px] data-[state=active]:bg-hover data-[state=active]:text-foreground">Overview</TabsTrigger>
+                    <TabsTrigger value="sessions" className="text-[13px] data-[state=active]:bg-hover data-[state=active]:text-foreground">Sessions</TabsTrigger>
+                    <TabsTrigger value="executions" className="text-[13px] data-[state=active]:bg-hover data-[state=active]:text-foreground">Executions</TabsTrigger>
+                    <TabsTrigger value="changes" className="text-[13px] data-[state=active]:bg-hover data-[state=active]:text-foreground">Changes</TabsTrigger>
                     <TabsTrigger
                       value="files"
                       className="text-[13px] data-[state=active]:bg-hover data-[state=active]:text-foreground"
@@ -446,8 +477,11 @@ export function ProjectsPage() {
                     >
                       Rules
                     </TabsTrigger>
+                    <TabsTrigger value="git" className="text-[13px] data-[state=active]:bg-hover data-[state=active]:text-foreground">Git</TabsTrigger>
+                    <TabsTrigger value="settings" className="text-[13px] data-[state=active]:bg-hover data-[state=active]:text-foreground">Settings</TabsTrigger>
                   </TabsList>
                 </div>
+                {(["overview", "sessions", "executions", "changes", "git", "settings"] as const).map((section) => <TabsContent key={section} value={section} className="flex-1 min-h-0 flex flex-col"><ProjectDataTab project={selectedProject} kind={section} /></TabsContent>)}
                 <TabsContent
                   value="files"
                   className="flex-1 min-h-0 flex flex-col"

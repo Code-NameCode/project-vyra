@@ -136,6 +136,9 @@ export const useAppStore = create<AppState>()(
           railPage: "home",
           mode: s.mode,
         }));
+        if (typeof window !== "undefined") {
+          void fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, title: "", titleSource: "auto" }) }).catch(() => undefined);
+        }
         return t.id;
       },
       renameTab: (id, title) =>
@@ -232,15 +235,5 @@ export const useAppStore = create<AppState>()(
     }
   )
 );
-
-// ensure there's always at least one tab and a valid active tab (handles
-// first run + rehydrated state)
-const st = useAppStore.getState();
-if (st.tabs.length === 0) {
-  const t = makeTab();
-  useAppStore.setState({ tabs: [t], activeTabId: t.id });
-} else if (!st.activeTabId || !st.tabs.some((t) => t.id === st.activeTabId)) {
-  useAppStore.setState({ activeTabId: st.tabs[0].id });
-}
 
 export { makeTab };

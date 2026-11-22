@@ -6,11 +6,13 @@ import {
   Eye,
   EyeOff,
   FolderOpen,
+  Import,
   Loader2,
   Palette,
   Plus,
   RefreshCw,
   RotateCcw,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -36,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useAppStore } from "@/stores/useAppStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
@@ -49,6 +52,7 @@ import {
   type ThemeDef,
   getPresetTheme,
 } from "@/data/themes";
+import { AGENTS } from "@/data/agents";
 
 function FieldRow({
   label,
@@ -86,7 +90,7 @@ const PROVIDER_TYPE_LABEL: Record<ProviderType, string> = {
 
 /** A provider is connected when enabled and either ollama (no key needed) or has an API key. */
 function isConnected(p: Provider): boolean {
-  return p.enabled && (p.type === "ollama" || !!p.apiKey);
+  return p.enabled && (p.type === "ollama" || !!p.apiKey || !!p.credentialConfigured);
 }
 
 function ProviderCard({
@@ -181,10 +185,17 @@ function ProviderCard({
               }
               onBlur={() => {
                 if (provider.apiKey.trim()) {
-                  void detectProviderModels(provider.id, true);
-                  toast(
-                    "Fetching models — all hidden until you select them"
-                  );
+                  const secret = provider.apiKey.trim();
+                  void fetch("/api/credentials", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ providerId: provider.id, apiKey: secret }),
+                  }).then(async (response) => {
+                    if (!response.ok) throw new Error("Credential vault rejected the key");
+                    updateProvider(provider.id, { apiKey: "", credentialConfigured: true });
+                    await detectProviderModels(provider.id, true);
+                    toast("Credential saved in the server vault; fetching models");
+                  }).catch((error) => toast.error(error instanceof Error ? error.message : "Unable to save credential"));
                 }
               }}
               placeholder="sk-..."
@@ -410,7 +421,9 @@ function ThemeCard({
 
 function AppearanceTabContent() {
   const themeId = useSettingsStore((s) => s.themeId);
+  const defaultThemeId = useSettingsStore((s) => s.defaultThemeId);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const setDefaultTheme = useSettingsStore((s) => s.setDefaultTheme);
   const customVars = useSettingsStore((s) => s.customVars);
   const setCustomVar = useSettingsStore((s) => s.setCustomVar);
   const resetTheme = useSettingsStore((s) => s.resetTheme);
@@ -472,6 +485,25 @@ function AppearanceTabContent() {
               onSelect={() => setTheme(t.id)}
             />
           ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setDefaultTheme();
+              toast("Current theme set as default");
+            }}
+            className={cn(
+              "inline-flex items-center gap-2 h-8 px-3 rounded-[8px]",
+              "border border-ws-border bg-card-ws text-[12.5px] hover:bg-hover focus-ring"
+            )}
+          >
+            <Star className="size-3.5 text-accent-hi" />
+            Set current theme as default
+          </button>
+          <span className="text-[12px] text-ws-secondary">
+            Default: {getPresetTheme(defaultThemeId).name}
+          </span>
         </div>
       </div>
 
@@ -645,19 +677,40 @@ export function SettingsModal() {
   const setBaseUrl = useSettingsStore((s) => s.setBaseUrl);
   const defaultModelId = useSettingsStore((s) => s.defaultModelId);
   const setDefaultModelId = useSettingsStore((s) => s.setDefaultModelId);
+  const defaultAgentId = useSettingsStore((s) => s.defaultAgentId);
+  const setDefaultAgentId = useSettingsStore((s) => s.setDefaultAgentId);
   const agentInstructions = useSettingsStore((s) => s.agentInstructions);
   const setAgentInstructions = useSettingsStore((s) => s.setAgentInstructions);
-  const skills = useSettingsStore((s) => s.skills);
-  const addSkill = useSettingsStore((s) => s.addSkill);
-  const removeSkill = useSettingsStore((s) => s.removeSkill);
   const skillsFolderPath = useSettingsStore((s) => s.skillsFolderPath);
   const setSkillsFolderPath = useSettingsStore((s) => s.setSkillsFolderPath);
+  const setSkills = useSettingsStore((s) => s.setSkills);
   const useRealApi = useSettingsStore((s) => s.useRealApi);
   const setUseRealApi = useSettingsStore((s) => s.setUseRealApi);
+  const enabledAgentIds = useSettingsStore((s) => s.enabledAgentIds);
+  const detectedAgentIds = useSettingsStore((s) => s.detectedAgentIds);
+  const setEnabledAgentIds = useSettingsStore((s) => s.setEnabledAgentIds);
+  const setDetectedAgentIds = useSettingsStore((s) => s.setDetectedAgentIds);
 
   const providers = useProvidersStore((s) => s.providers);
   const addProvider = useProvidersStore((s) => s.addProvider);
   const removeProvider = useProvidersStore((s) => s.removeProvider);
+  const updateProvider = useProvidersStore((s) => s.updateProvider);
+  const importProviders = useProvidersStore((s) => s.importProviders);
+
+  React.useEffect(() => {
+    if (!open) return;
+    void fetch("/api/credentials")
+      .then((response) => (response.ok ? response.json() : { providers: [] }))
+      .then((data: { providers?: string[] }) => {
+        const configured = new Set(data.providers || []);
+        for (const provider of useProvidersStore.getState().providers) {
+          if (provider.credentialConfigured !== configured.has(provider.id)) {
+            updateProvider(provider.id, { credentialConfigured: configured.has(provider.id), apiKey: "" });
+          }
+        }
+      })
+      .catch(() => undefined);
+  }, [open, updateProvider]);
 
   // Visible provider models (from connected providers, non-hidden) — used to
   // populate the General tab's default-model picker instead of the old static
@@ -674,8 +727,39 @@ export function SettingsModal() {
     return out;
   }, [providers]);
 
-  const [newSkill, setNewSkill] = React.useState("");
   const [tab, setTab] = React.useState("general");
+  const [foundSkills, setFoundSkills] = React.useState<string[]>([]);
+  const [scanning, setScanning] = React.useState(false);
+  const [scanError, setScanError] = React.useState<string | null>(null);
+  const [browseOpen, setBrowseOpen] = React.useState(false);
+  const [browsePath, setBrowsePath] = React.useState("");
+  const [browseEntries, setBrowseEntries] = React.useState<
+    { name: string; type: string; path: string }[]
+  >([]);
+  const [browseParent, setBrowseParent] = React.useState<string | null>(null);
+  const [browseCurrent, setBrowseCurrent] = React.useState("");
+  const [browseLoading, setBrowseLoading] = React.useState(false);
+  const [browseError, setBrowseError] = React.useState<string | null>(null);
+  const [agentScanning, setAgentScanning] = React.useState(false);
+  const [agentScanError, setAgentScanError] = React.useState<string | null>(
+    null
+  );
+  const [agentResults, setAgentResults] = React.useState<
+    { id: string; detected: boolean }[]
+  >([]);
+  const [cliProviders, setCliProviders] = React.useState<
+    {
+      id: string;
+      name: string;
+      sourceCli: string;
+      baseUrl: string;
+      models: string[];
+      hasApiKey: boolean;
+    }[]
+  >([]);
+  const [cliSelected, setCliSelected] = React.useState<string[]>([]);
+  const [cliScanning, setCliScanning] = React.useState(false);
+  const [cliError, setCliError] = React.useState<string | null>(null);
 
   const [addOpen, setAddOpen] = React.useState(false);
   const [newName, setNewName] = React.useState("");
@@ -705,58 +789,182 @@ export function SettingsModal() {
 
   const confirmRemove = () => {
     if (!removeTarget) return;
+    void fetch("/api/credentials", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providerId: removeTarget.id }),
+    }).catch(() => undefined);
     removeProvider(removeTarget.id);
     toast.success("Provider removed");
     setRemoveTarget(null);
   };
 
-  const addSkillOnEnter = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    const v = newSkill.trim();
-    if (!v) return;
-    addSkill(v);
-    setNewSkill("");
+  const scanSkillsFolder = async () => {
+    const p = skillsFolderPath.trim();
+    if (!p) return;
+    setScanning(true);
+    setScanError(null);
+    try {
+      const res = await fetch(`/api/skills?path=${encodeURIComponent(p)}`);
+      const data = (await res.json()) as {
+        skills: { name: string }[];
+        error: string | null;
+      };
+      if (data.error) {
+        setScanError(data.error);
+        setFoundSkills([]);
+      } else {
+        const skills = (data.skills || []).map((s: { name: string; description?: string }) => ({
+          name: s.name,
+          description: s.description,
+        }));
+        setFoundSkills(skills.map((s) => s.name));
+        setSkills(skills);
+        setScanError(null);
+      }
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : "Scan failed");
+      setFoundSkills([]);
+    } finally {
+      setScanning(false);
+    }
   };
 
-  const folderInputRef = React.useRef<HTMLInputElement>(null);
+  const scanCliConfigs = async () => {
+    setCliScanning(true);
+    setCliError(null);
+    try {
+      const res = await fetch("/api/import-config", { cache: "no-store" });
+      const data = (await res.json()) as {
+        providers: {
+          id: string;
+          name: string;
+          sourceCli: string;
+          baseUrl: string;
+          models: string[];
+          hasApiKey: boolean;
+        }[];
+        error?: string | null;
+      };
+      if (data.error) throw new Error(data.error);
+      setCliProviders(data.providers || []);
+      setCliSelected((data.providers || []).map((p) => p.id));
+      toast.success(
+        `Found ${data.providers?.length ?? 0} CLI provider(s)`
+      );
+    } catch (e) {
+      setCliError(e instanceof Error ? e.message : "Import scan failed");
+      setCliProviders([]);
+    } finally {
+      setCliScanning(false);
+    }
+  };
 
-  React.useEffect(() => {
-    const el = folderInputRef.current;
-    if (el) {
-      el.setAttribute("webkitdirectory", "");
-    }
-  }, []);
+  const confirmCliImport = () => {
+    const chosen = cliProviders.filter((p) => cliSelected.includes(p.id));
+    const added = importProviders(chosen);
+    toast.success(
+      `Imported ${chosen.length} provider(s) (${added} new)`
+    );
+    setCliProviders([]);
+    setCliSelected([]);
+  };
 
-  const onFolderPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList || fileList.length === 0) {
-      e.target.value = "";
-      return;
+  const toggleCliProvider = (id: string, on: boolean) => {
+    setCliSelected((prev) =>
+      on ? [...prev, id] : prev.filter((x) => x !== id)
+    );
+  };
+
+  const scanAgents = async () => {
+    setAgentScanning(true);
+    setAgentScanError(null);
+    try {
+      const res = await fetch("/api/agents", { cache: "no-store" });
+      const data = (await res.json()) as {
+        agents: { id: string; detected: boolean }[];
+        error?: string | null;
+      };
+      if (data.error) throw new Error(data.error);
+      const detected = (data.agents || [])
+        .filter((a) => a.detected)
+        .map((a) => a.id);
+      setDetectedAgentIds(detected);
+      // On first scan, enable everything that was found. Afterwards keep the
+      // user's selection but drop agents that are no longer installed.
+      setEnabledAgentIds(
+        enabledAgentIds.length > 0
+          ? enabledAgentIds.filter((id) => detected.includes(id))
+          : detected
+      );
+      setAgentResults(data.agents || []);
+      toast.success(
+        detected.length > 0
+          ? `Detected ${detected.length} agent(s)`
+          : "No agents detected"
+      );
+    } catch (e) {
+      setAgentScanError(e instanceof Error ? e.message : "Detection failed");
+    } finally {
+      setAgentScanning(false);
     }
-    const first = fileList[0] as File & { webkitRelativePath?: string };
-    const rel = first.webkitRelativePath;
-    if (rel) {
-      const folderName = rel.split("/")[0];
-      if (folderName) setSkillsFolderPath(folderName);
-    }
-    const added = new Set<string>();
-    for (let i = 0; i < fileList.length; i++) {
-      const name = fileList[i].name;
-      const lower = name.toLowerCase();
-      if (!lower.endsWith(".md") && !lower.endsWith(".txt")) continue;
-      const base = name.replace(/\.[^.]+$/, "");
-      if (!base) continue;
-      if (skills.includes(base) || added.has(base)) continue;
-      addSkill(base);
-      added.add(base);
-    }
-    if (added.size > 0) {
-      toast.success(`${added.size} skill(s) imported from folder`);
+  };
+
+  const toggleAgent = (id: string, on: boolean) => {
+    setEnabledAgentIds(
+      on
+        ? [...enabledAgentIds, id]
+        : enabledAgentIds.filter((x) => x !== id)
+    );
+  };
+
+  const detectedMap = React.useMemo(() => {
+    const map: Record<string, boolean> = {};
+    if (agentResults.length > 0) {
+      for (const r of agentResults) map[r.id] = r.detected;
+    } else if (detectedAgentIds.length > 0) {
+      for (const id of detectedAgentIds) map[id] = true;
     } else {
-      toast("No skill files found in folder");
+      for (const a of AGENTS) map[a.id] = a.detected;
     }
-    e.target.value = "";
+    return map;
+  }, [agentResults, detectedAgentIds]);
+
+  const effectiveEnabledAgentIds =
+    enabledAgentIds.length > 0
+      ? enabledAgentIds
+      : AGENTS.filter((a) => detectedMap[a.id]).map((a) => a.id);
+
+  const loadBrowse = async (p: string) => {
+    setBrowseLoading(true);
+    setBrowseError(null);
+    try {
+      const res = await fetch(`/api/browse?path=${encodeURIComponent(p)}`);
+      const data = (await res.json()) as {
+        current: string;
+        parent: string | null;
+        entries: { name: string; type: string; path: string }[];
+        error: string | null;
+      };
+      if (data.error) {
+        setBrowseError(data.error);
+        setBrowseEntries([]);
+      } else {
+        setBrowseCurrent(data.current);
+        setBrowsePath(data.current);
+        setBrowseParent(data.parent);
+        setBrowseEntries(data.entries || []);
+      }
+    } catch (e) {
+      setBrowseError(e instanceof Error ? e.message : "Browse failed");
+    } finally {
+      setBrowseLoading(false);
+    }
+  };
+
+  const openBrowse = () => {
+    setBrowseOpen(true);
+    loadBrowse(skillsFolderPath || "");
   };
 
   return (
@@ -820,7 +1028,8 @@ export function SettingsModal() {
                       Use real OpenAI-compatible API
                     </span>
                     <span className="text-[12px] text-ws-disabled">
-                      When off, Goodstuff-Agent uses mock streaming responses.
+                      When off, chat requests fail with an error code instead
+                      of contacting a provider.
                     </span>
                   </div>
                   <Switch
@@ -867,6 +1076,35 @@ export function SettingsModal() {
                     </SelectContent>
                   </Select>
                 </FieldRow>
+                <FieldRow label="Default agent" htmlFor="settings-agent-default">
+                  <Select
+                    value={defaultAgentId || "__none__"}
+                    onValueChange={(v) =>
+                      setDefaultAgentId(v === "__none__" ? "" : v)
+                    }
+                  >
+                    <SelectTrigger
+                      id="settings-agent-default"
+                      className="focus-ring bg-card-ws border-ws-border text-[13px] w-full"
+                    >
+                      <SelectValue placeholder="Select default agent" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-ws-border">
+                      <SelectItem value="__none__" className="text-[13px]">
+                        None
+                      </SelectItem>
+                      {effectiveEnabledAgentIds.map((id) => {
+                        const a = AGENTS.find((x) => x.id === id);
+                        if (!a) return null;
+                        return (
+                          <SelectItem key={id} value={id} className="text-[13px]">
+                            {a.name} · {a.vendor}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </FieldRow>
               </div>
             </TabsContent>
 
@@ -896,7 +1134,99 @@ export function SettingsModal() {
                   </button>
                 </div>
 
-                <div className="ws-scroll max-h-[360px] overflow-y-auto flex flex-col gap-2 mt-3">
+                <div className="grid gap-2 rounded-[10px] border border-ws-border bg-card-ws p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="grid gap-0.5">
+                      <span className="text-[13px] font-medium text-foreground">
+                        Import from installed CLI configs
+                      </span>
+                      <span className="text-[12px] text-ws-secondary">
+                        Pull providers and models from Codex, OpenCode, Kilo,
+                        Claude Code and Gemini. Keys are never copied.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={scanCliConfigs}
+                      disabled={cliScanning}
+                      className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] border border-ws-border bg-hover text-[13px] hover:bg-card-ws focus-ring disabled:opacity-50"
+                    >
+                      {cliScanning ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Import className="size-3.5" />
+                      )}
+                      {cliScanning ? "Scanning…" : "Scan CLI configs"}
+                    </button>
+                  </div>
+
+                  {cliError ? (
+                    <p className="text-[12px] text-red-400">{cliError}</p>
+                  ) : null}
+
+                  {cliProviders.length > 0 ? (
+                    <>
+                      <div className="grid gap-1.5">
+                        {cliProviders.map((p) => (
+                          <label
+                            key={p.id}
+                            className={cn(
+                              "flex items-start gap-3 rounded-[8px] border border-ws-border px-3 py-2",
+                              "cursor-pointer hover:bg-hover"
+                            )}
+                          >
+                            <Checkbox
+                              checked={cliSelected.includes(p.id)}
+                              onCheckedChange={(v) =>
+                                toggleCliProvider(p.id, v === true)
+                              }
+                              className="mt-0.5"
+                              aria-label={`Import ${p.name}`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[13px] font-medium text-foreground">
+                                  {p.name}
+                                </span>
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-1.5 py-0"
+                                >
+                                  {p.sourceCli}
+                                </Badge>
+                                {p.hasApiKey ? (
+                                  <span className="text-[10px] text-accent-hi">
+                                    key found in CLI (not copied)
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="text-[11px] text-ws-disabled truncate font-mono">
+                                {p.baseUrl || "No base URL found"}
+                              </div>
+                              <div className="text-[12px] text-ws-secondary">
+                                {p.models.length} model(s):{" "}
+                                {p.models.slice(0, 4).join(", ")}
+                                {p.models.length > 4 ? "…" : ""}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={confirmCliImport}
+                          disabled={cliSelected.length === 0}
+                          className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:bg-accent-hi focus-ring disabled:opacity-50"
+                        >
+                          Import {cliSelected.length} provider(s)
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+
+                <div className="ws-scroll max-h-[360px] overflow-y-auto flex flex-col gap-2 mt-1">
                   {providers.length === 0 ? (
                     <p className="text-[12.5px] text-ws-disabled">
                       No providers configured.
@@ -919,14 +1249,139 @@ export function SettingsModal() {
             </TabsContent>
 
             <TabsContent value="agents" className="mt-4">
-              <FieldRow label="AGENTS.md" htmlFor="settings-agents">
-                <Textarea
-                  id="settings-agents"
-                  value={agentInstructions}
-                  onChange={(e) => setAgentInstructions(e.target.value)}
-                  className="focus-ring bg-card-ws border-ws-border min-h-[200px] font-mono text-[13px]"
-                />
-              </FieldRow>
+              <div className="grid gap-3">
+                <div className="grid gap-0.5">
+                  <span className="text-[14px] font-medium text-foreground">
+                    Installed agents
+                  </span>
+                  <span className="text-[12px] text-ws-secondary">
+                    Detect coding agents installed on this machine, then choose
+                    which ones appear in the composer agent picker.
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={scanAgents}
+                    disabled={agentScanning}
+                    className={cn(
+                      "inline-flex items-center gap-2 h-9 px-3 rounded-[8px]",
+                      "border border-ws-border bg-card-ws text-[13px] hover:bg-hover focus-ring",
+                      "disabled:opacity-50"
+                    )}
+                  >
+                    {agentScanning ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-3.5" />
+                    )}
+                    {agentScanning ? "Detecting..." : "Detect installed agents"}
+                  </button>
+                  <span className="text-[12px] text-ws-secondary">
+                    {effectiveEnabledAgentIds.length} enabled
+                  </span>
+                </div>
+
+                {agentScanError ? (
+                  <p className="text-[12px] text-red-400">{agentScanError}</p>
+                ) : null}
+
+                <FieldRow label="Default agent" htmlFor="settings-agents-default">
+                  <Select
+                    value={defaultAgentId || "__none__"}
+                    onValueChange={(v) =>
+                      setDefaultAgentId(v === "__none__" ? "" : v)
+                    }
+                  >
+                    <SelectTrigger
+                      id="settings-agents-default"
+                      className="focus-ring bg-card-ws border-ws-border text-[13px] w-full"
+                    >
+                      <SelectValue placeholder="Select default agent" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-ws-border">
+                      <SelectItem value="__none__" className="text-[13px]">
+                        None
+                      </SelectItem>
+                      {effectiveEnabledAgentIds.map((id) => {
+                        const a = AGENTS.find((x) => x.id === id);
+                        if (!a) return null;
+                        return (
+                          <SelectItem key={id} value={id} className="text-[13px]">
+                            {a.name} · {a.vendor}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </FieldRow>
+
+                <div className="grid gap-1.5">
+                  {AGENTS.map((a) => {
+                    const detected = Boolean(detectedMap[a.id]);
+                    const enabled = effectiveEnabledAgentIds.includes(a.id);
+                    return (
+                      <label
+                        key={a.id}
+                        className={cn(
+                          "flex items-start gap-3 rounded-[10px] border border-ws-border",
+                          "bg-card-ws px-3 py-2.5",
+                          detected
+                            ? "cursor-pointer hover:bg-hover"
+                            : "opacity-60"
+                        )}
+                      >
+                        <Checkbox
+                          checked={detected && enabled}
+                          disabled={!detected}
+                          onCheckedChange={(v) =>
+                            toggleAgent(a.id, v === true)
+                          }
+                          className="mt-0.5"
+                          aria-label={`Enable ${a.name}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-medium text-foreground">
+                              {a.name}
+                            </span>
+                            <span className="text-[11px] text-ws-secondary">
+                              {a.vendor}
+                            </span>
+                            {detected ? (
+                              <Badge
+                                variant="secondary"
+                                className="bg-accent-fill/10 text-accent-hi border border-accent-fill/30 text-[10px] px-1.5 py-0"
+                              >
+                                installed
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] uppercase tracking-wide text-ws-disabled">
+                                not found
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[12px] text-ws-secondary line-clamp-1">
+                            {a.description}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="h-px bg-ws-border my-1" />
+
+                <FieldRow label="AGENTS.md" htmlFor="settings-agents">
+                  <Textarea
+                    id="settings-agents"
+                    value={agentInstructions}
+                    onChange={(e) => setAgentInstructions(e.target.value)}
+                    className="focus-ring bg-card-ws border-ws-border min-h-[200px] font-mono text-[13px]"
+                  />
+                </FieldRow>
+              </div>
             </TabsContent>
 
             <TabsContent value="skills" className="mt-4">
@@ -942,84 +1397,120 @@ export function SettingsModal() {
                 </div>
                 <div className="flex items-center gap-2 mt-2">
                   <Input
-                    readOnly
-                    value={skillsFolderPath || "No folder selected"}
+                    value={skillsFolderPath}
+                    onChange={(e) => setSkillsFolderPath(e.target.value)}
+                    placeholder="C:\\path\\to\\skills (or relative folder)"
                     aria-label="Skills folder path"
                     className="bg-card-ws border border-ws-border h-9 text-[13px] flex-1 font-mono focus-ring"
                   />
                   <button
                     type="button"
-                    onClick={() => folderInputRef.current?.click()}
-                    className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-ws-border bg-card-ws text-[13px] hover:bg-hover focus-ring"
+                    onClick={scanSkillsFolder}
+                    disabled={scanning || !skillsFolderPath.trim()}
+                    className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-ws-border bg-card-ws text-[13px] hover:bg-hover focus-ring disabled:opacity-50"
                   >
                     <FolderOpen className="size-3.5" />
+                    {scanning ? "Scanning..." : "Scan"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openBrowse}
+                    className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-ws-border bg-card-ws text-[13px] hover:bg-hover focus-ring"
+                  >
                     Browse
                   </button>
                 </div>
-                <input
-                  ref={(el) => {
-                    folderInputRef.current = el;
-                    if (el) el.setAttribute("webkitdirectory", "");
-                  }}
-                  type="file"
-                  multiple
-                  accept=".md,.txt"
-                  onChange={onFolderPicked}
-                  aria-hidden
-                  className="hidden"
-                />
-              </div>
-
-              <div className="grid gap-3 mt-4">
-                <div className="flex flex-wrap gap-2">
-                  {skills.length === 0 ? (
-                    <p className="text-[12.5px] text-ws-disabled">
-                      No skills configured.
+                {scanError && (
+                  <p className="text-[12.5px] text-red-400 mt-2">{scanError}</p>
+                )}
+                {foundSkills.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[12.5px] text-ws-secondary mb-1">
+                      {foundSkills.length} skill(s) found in linked folder.
                     </p>
-                  ) : (
-                    skills.map((s) => (
-                      <Badge
-                        key={s}
-                        variant="secondary"
-                        className="bg-hover text-foreground border border-ws-border-soft gap-1.5 pl-2.5 pr-1 py-1 text-[12px]"
+                    <div className="text-[12px] text-ws-secondary font-mono ws-scroll max-h-[160px] overflow-y-auto">
+                      {foundSkills.map((s) => (
+                        <div key={s} className="py-0.5">{s}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {browseOpen && (
+                  <div className="mt-3 rounded-[8px] border border-ws-border bg-card-ws p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Input
+                        value={browsePath}
+                        onChange={(e) => setBrowsePath(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") loadBrowse(browsePath);
+                        }}
+                        className="bg-card-ws border border-ws-border h-8 text-[12px] flex-1 font-mono focus-ring"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => loadBrowse(browsePath)}
+                        className="h-8 px-2 rounded border border-ws-border text-[12px] hover:bg-hover"
                       >
-                        {s}
+                        Go
+                      </button>
+                      {browseParent && (
                         <button
                           type="button"
-                          onClick={() => removeSkill(s)}
-                          aria-label={`Remove ${s}`}
-                          className="focus-ring rounded p-0.5 text-ws-secondary hover:text-foreground"
+                          onClick={() => loadBrowse(browseParent)}
+                          className="h-8 px-2 rounded border border-ws-border text-[12px] hover:bg-hover"
                         >
-                          <X className="size-3" />
+                          Up
                         </button>
-                      </Badge>
-                    ))
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={newSkill}
-                    onChange={(e) => setNewSkill(e.target.value)}
-                    onKeyDown={addSkillOnEnter}
-                    placeholder="Add a skill and press Enter"
-                    className="focus-ring bg-card-ws border-ws-border text-[13px]"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="bg-card-ws border-ws-border text-ws-secondary hover:text-foreground"
-                    onClick={() => {
-                      const v = newSkill.trim();
-                      if (!v) return;
-                      addSkill(v);
-                      setNewSkill("");
-                    }}
-                  >
-                    <Plus className="size-3.5" />
-                    Add
-                  </Button>
-                </div>
+                      )}
+                    </div>
+                    {browseError && (
+                      <p className="text-[12px] text-red-400 mb-2">{browseError}</p>
+                    )}
+                    <div className="ws-scroll max-h-[220px] overflow-y-auto">
+                      {browseLoading ? (
+                        <p className="text-[12px] text-ws-secondary">Loading...</p>
+                      ) : (
+                        browseEntries
+                          .filter((e) => e.type === "dir")
+                          .map((e) => (
+                            <button
+                              key={e.path}
+                              type="button"
+                              onClick={() => loadBrowse(e.path)}
+                              className="w-full text-left px-2 py-1 text-[12px] font-mono text-foreground hover:bg-hover rounded"
+                            >
+                              [dir] {e.name}
+                            </button>
+                          ))
+                      )}
+                    </div>
+                    <div className="flex items-center justify-end gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => setBrowseOpen(false)}
+                        className="h-8 px-3 rounded border border-ws-border text-[12px] hover:bg-hover"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSkillsFolderPath(browseCurrent || browsePath);
+                          setBrowseOpen(false);
+                        }}
+                        className="h-8 px-3 rounded bg-accent-fill text-white text-[12px] hover:bg-accent-hi"
+                      >
+                        Select this folder
+                      </button>
+                    </div>
+                  </div>
+                )}
+               </div>
+
+              <div className="grid gap-3 mt-4">
+                <p className="text-[12.5px] text-ws-disabled">
+                  Skills are provided by the linked folder above.
+                </p>
               </div>
             </TabsContent>
           </Tabs>

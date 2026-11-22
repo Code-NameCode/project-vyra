@@ -3,20 +3,19 @@
 import { useState } from "react";
 import type { Conversation } from "@/lib/types";
 import { FileTree } from "../FileTree";
-import { CodeViewer } from "../CodeViewer";
+import { DocumentViewer } from "../DocumentViewer";
 
 interface FilesViewProps {
   conv?: Conversation;
+  onUpdateFile?: (path: string, content: string) => void;
 }
 
-export function FilesView({ conv }: FilesViewProps) {
+export function FilesView({ conv, onUpdateFile }: FilesViewProps) {
   const files = conv?.workspace.files ?? [];
   const [selectedPath, setSelectedPath] = useState<string | undefined>(
     undefined
   );
 
-  // derive the effective selection without setState-in-effect:
-  // keep the current selection if it still exists, otherwise fall back to first file
   const effectivePath =
     selectedPath && files.some((f) => f.path === selectedPath)
       ? selectedPath
@@ -43,10 +42,15 @@ export function FilesView({ conv }: FilesViewProps) {
           onSelect={setSelectedPath}
         />
       </div>
-      <CodeViewer
+      <DocumentViewer
         code={selected?.content}
         language={selected?.language}
         filename={selected?.name}
+        onChange={
+          onUpdateFile && selected
+            ? (content) => onUpdateFile(selected.path, content)
+            : undefined
+        }
       />
     </div>
   );

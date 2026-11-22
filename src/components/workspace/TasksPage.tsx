@@ -220,7 +220,7 @@ function GitHubCard() {
     }
     setConnecting(true);
     try {
-      const res = await fetch(`/api/github/repos?token=${encodeURIComponent(token)}`);
+      const res = await fetch("/api/github/repos", { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error("request failed");
       const data = (await res.json()) as { repos: GitHubRepo[]; real?: boolean };
       setGithubToken(token);

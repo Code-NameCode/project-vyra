@@ -13,20 +13,180 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model LocalProfile {
+  id            String   @id @default(cuid())
+  name          String?
+  workspaceRoot String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  activeProjectId String?
+  projects      ProjectRecord[]
+  providers     ProviderRecord[]
+  executions    ExecutionRecord[]
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model ProjectRecord {
+  id            String   @id
+  profileId     String
+  profile       LocalProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name          String
+  description   String   @default("")
+  icon          String   @default("folder")
+  directory     String
+  instructions  String   @default("")
+  memory        String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  archivedAt    DateTime?
+  defaultProviderId String?
+  defaultModelId String?
+  conversations ConversationRecord[]
+  executions    ExecutionRecord[]
+  changes       FileChangeRecord[]
+  @@index([profileId])
+}
+
+model ConversationRecord {
+  id         String   @id
+  projectId  String?
+  project    ProjectRecord? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title      String   @default("")
+  titleSource String  @default("auto")
+  modelId    String   @default("")
+  pinnedAt   DateTime?
+  archivedAt DateTime?
+  deletedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  messages   MessageRecord[]
+  executions ExecutionRecord[]
+  @@index([projectId])
+  @@index([updatedAt, archivedAt])
+  @@index([pinnedAt, updatedAt])
+}
+
+model MessageRecord {
+  id             String   @id
+  conversationId String
+  conversation   ConversationRecord @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  createdAt      DateTime @default(now())
+  @@index([conversationId, createdAt])
+}
+
+model ProviderRecord {
+  id            String   @id
+  profileId     String
+  profile       LocalProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name          String
+  type          String
+  baseUrl       String
+  encryptedKey  String?
+  enabled       Boolean  @default(true)
+  capabilities  String   @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([profileId])
+}
+
+model ExecutionRecord {
+  id          String   @id
+  profileId   String
+  profile     LocalProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     ProjectRecord? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversationId String?
+  conversation ConversationRecord? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  status      String
+  request     String
+  events      String   @default("[]")
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  eventsLog   ExecutionEventRecord[]
+  changes     FileChangeRecord[]
+  @@index([profileId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model ExecutionEventRecord {
+  id          String   @id
+  executionId String
+  execution   ExecutionRecord @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  type        String
+  payload     String
+  sequence    Int
+  createdAt   DateTime @default(now())
+  @@unique([executionId, sequence])
+  @@index([executionId, createdAt])
+}
+
+model ApprovalRecord {
+  id          String   @id
+  executionId String?
+  level       String
+  action      String
+  input       String
+  status      String
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  @@index([executionId, status])
+}
+
+model FileChangeRecord {
+  id         String   @id
+  projectId  String
+  project    ProjectRecord @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executionId String?
+  execution   ExecutionRecord? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  tool       String   @default("write_file")
+  approvalId String?
+  groupId    String?
+  path       String
+  status     String
+  beforeHash String?
+  afterHash  String?
+  originalSnapshot String?
+  modifiedSnapshot String?
+  diff       String
+  operationStatus String @default("committed")
+  createdAt  DateTime @default(now())
+  @@index([projectId, createdAt])
+}
+
+model TaskRecord {
+  id          String   @id
+  profileId   String
+  projectId   String?
+  name        String
+  definition  String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([profileId, updatedAt])
+}
+
+model ArtifactRecord {
+  id          String   @id
+  executionId String?
+  projectId   String?
+  name        String
+  type        String
+  path        String?
+  metadata    String   @default("{}")
+  createdAt   DateTime @default(now())
+  @@index([executionId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model MigrationRecord {
+  id          String   @id
+  source      String
+  version     String
+  status      String
+  report      String
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  @@unique([source, version])
 }

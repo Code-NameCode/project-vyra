@@ -9,10 +9,9 @@ const MOCK_REPOS = [
   { owner: "octocat", name: "hello-world", fullName: "octocat/hello-world" },
 ];
 
-/** GET /api/github/repos?token=... — list repos (real if token, mock otherwise) */
+/** GET /api/github/repos — list repos; token comes from the Authorization header (never the URL). */
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const token = url.searchParams.get("token");
+  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
 
   if (!token) {
     return NextResponse.json({ repos: MOCK_REPOS, real: false });

@@ -8,7 +8,7 @@
    Palette (per spec):
      page #0b0b0c | surface #111214 | card #16181a | hover #1c1e21
      borders #2a2d31 / soft #26282b | text #f2f2f2 / #9a9ea4 / #5f6368
-     accent green fill #5a9e3f / highlight #7bc65a
+     accent VYRA red fill #fa3a18 / highlight #ff8c75
    ============================================================ */
 
 @theme inline {
@@ -84,8 +84,8 @@
   --ws-disabled: #5f6368;
 
   /* accent */
-  --accent-fill: #5a9e3f;
-  --accent-hi: #7bc65a;
+  --accent-fill: #fa3a18;
+  --accent-hi: #ff8c75;
   --streak: #f08a3c;
 
   /* shadcn mapping -> workspace dark values (always dark) */
@@ -95,7 +95,7 @@
   --card-foreground: #f2f2f2;
   --popover: #16181a;
   --popover-foreground: #f2f2f2;
-  --primary: #5a9e3f;
+  --primary: #fa3a18;
   --primary-foreground: #ffffff;
   --secondary: #1c1e21;
   --secondary-foreground: #f2f2f2;
@@ -106,20 +106,20 @@
   --destructive: #e5484d;
   --border: #2a2d31;
   --input: #3a3d41;
-  --ring: #7bc65a;
-  --chart-1: #5a9e3f;
-  --chart-2: #7bc65a;
+  --ring: #ff8c75;
+  --chart-1: #fa3a18;
+  --chart-2: #ff8c75;
   --chart-3: #f08a3c;
   --chart-4: #6b8afd;
   --chart-5: #c084fc;
   --sidebar: #111214;
   --sidebar-foreground: #f2f2f2;
-  --sidebar-primary: #5a9e3f;
+  --sidebar-primary: #fa3a18;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #1c1e21;
   --sidebar-accent-foreground: #f2f2f2;
   --sidebar-border: #2a2d31;
-  --sidebar-ring: #7bc65a;
+  --sidebar-ring: #ff8c75;
 }
 
 .dark {
@@ -130,7 +130,7 @@
   --card-foreground: #f2f2f2;
   --popover: #16181a;
   --popover-foreground: #f2f2f2;
-  --primary: #5a9e3f;
+  --primary: #fa3a18;
   --primary-foreground: #ffffff;
   --secondary: #1c1e21;
   --secondary-foreground: #f2f2f2;
@@ -141,15 +141,15 @@
   --destructive: #e5484d;
   --border: #2a2d31;
   --input: #3a3d41;
-  --ring: #7bc65a;
+  --ring: #ff8c75;
   --sidebar: #111214;
   --sidebar-foreground: #f2f2f2;
-  --sidebar-primary: #5a9e3f;
+  --sidebar-primary: #fa3a18;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #1c1e21;
   --sidebar-accent-foreground: #f2f2f2;
   --sidebar-border: #2a2d31;
-  --sidebar-ring: #7bc65a;
+  --sidebar-ring: #ff8c75;
 }
 
 @layer base {

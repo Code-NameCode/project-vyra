@@ -3,8 +3,8 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Goodstuff-Agent wordmark. A rounded-square spark mark + bold wordmark.
- * Original asset, not derived from any real product logo.
+ * Goodstuff-VYRA brand assets. The square mark mirrors the favicon set
+ * (red ellipse VYRA wordmark on dark), the wordmark is rendered as text.
  */
 export function ForgeMark({
   size = 22,
@@ -14,22 +14,14 @@ export function ForgeMark({
   className?: string;
 }) {
   return (
-    <svg
+    <img
+      src="/android-chrome-192x192.png"
       width={size}
       height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-      className={cn("shrink-0", className)}
+      alt=""
       aria-hidden="true"
-    >
-      <rect width="32" height="32" rx="9" fill="#5a9e3f" />
-      <path
-        d="M16 6.5l2.6 6.4 6.9.5-5.3 4.5 1.7 6.8L16 21.2 9.7 25.2l1.7-6.8L6 13.9l6.9-.5L16 6.5z"
-        fill="#ffffff"
-        opacity="0.96"
-      />
-      <circle cx="16" cy="15.6" r="2.4" fill="#5a9e3f" />
-    </svg>
+      className={cn("shrink-0 rounded-[6px] object-cover", className)}
+    />
   );
 }
 
@@ -50,7 +42,7 @@ export function ForgeLogo({
           className="whitespace-nowrap text-[15px] font-semibold tracking-tight text-[#f2f2f2]"
           style={{ letterSpacing: "-0.01em" }}
         >
-          Goodstuff-Agent
+          Goodstuff-VYRA
         </span>
       )}
     </div>

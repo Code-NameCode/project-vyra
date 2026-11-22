@@ -150,7 +150,24 @@ export function RightPanel() {
       case "browser":
         return <BrowserView conv={effectiveConv} />;
       case "files":
-        return <FilesView conv={effectiveConv} />;
+        return (
+          <FilesView
+            conv={effectiveConv}
+            onUpdateFile={(path, content) => {
+              const updater = (ws: any) => ({
+                ...ws,
+                files: ws.files.map((f: any) =>
+                  f.path === path ? { ...f, content } : f
+                ),
+              });
+              if (projectId) {
+                useProjectsStore.getState().updateWorkspace(projectId, updater);
+              } else if (activeTabId) {
+                useChatStore.getState().updateWorkspace(activeTabId, updater);
+              }
+            }}
+          />
+        );
       case "terminal":
         return <TerminalView conv={effectiveConv} />;
       case "changes":

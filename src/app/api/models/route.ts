@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getCredential } from "@/lib/server/credential-vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,14 +11,35 @@ export const dynamic = "force-dynamic";
  *  - baseUrl: the provider base URL (e.g. https://api.openai.com/v1)
  *  - apiKey: the provider API key (omitted for ollama)
  *  - type: 'openai' | 'anthropic' | 'ollama' | 'custom'
+ *  - providerId / providerName: optional, used to detect special providers
  *
  * Returns { models: string[], detected: boolean, error: string | null }.
  */
+
+/** Models included in the Z.ai GLM Coding Plan. */
+const ZAI_CODING_MODELS = ["glm-5.3", "glm-5.3-flash"];
+
+function isZaiProvider(
+  baseUrl: string,
+  providerId: string,
+  providerName: string
+): boolean {
+  const identity = `${baseUrl} ${providerId} ${providerName}`.toLowerCase();
+  return (
+    identity.includes("z.ai") ||
+    identity.includes("zai") ||
+    identity.includes("xzai") ||
+    identity.includes("glm")
+  );
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const baseUrl = (url.searchParams.get("baseUrl") || "").replace(/\/$/, "");
-  const apiKey = url.searchParams.get("apiKey") || "";
+  const providerId = url.searchParams.get("providerId") || "";
+  const apiKey = providerId ? (await getCredential(providerId).catch(() => null)) || "" : "";
   const type = url.searchParams.get("type") || "openai";
+  const providerName = url.searchParams.get("providerName") || "";
 
   if (!baseUrl) {
     return NextResponse.json(
@@ -25,6 +47,8 @@ export async function GET(req: Request) {
       { status: 200 }
     );
   }
+
+  const zai = isZaiProvider(baseUrl, providerId, providerName);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6000);
@@ -81,7 +105,17 @@ export async function GET(req: Request) {
       headers,
     });
     clearTimeout(timeout);
+
     if (!res.ok) {
+      // Z.ai's coding-plan endpoint may not expose /models; the plan's model
+      // set is known, so return those instead of an error.
+      if (zai) {
+        return NextResponse.json({
+          models: ZAI_CODING_MODELS,
+          detected: true,
+          error: null,
+        });
+      }
       return NextResponse.json(
         {
           models: [],
@@ -91,8 +125,23 @@ export async function GET(req: Request) {
         { status: 200 }
       );
     }
+
     const data = await res.json();
-    const models = extract(data);
+    let models = extract(data);
+
+    if (zai) {
+      // Only surface the two models the coding plan actually grants access to.
+      const keep = (n: string) => /glm[-_]?5\.3/i.test(n);
+      const found = models.filter(keep);
+      // Normalize to the exact documented ids.
+      models = ZAI_CODING_MODELS.filter(
+        (id) =>
+          found.length === 0 ||
+          found.some((f) => f.toLowerCase().includes(id.split("-")[1]))
+      );
+      if (models.length === 0) models = ZAI_CODING_MODELS;
+    }
+
     return NextResponse.json({
       models,
       detected: true,
@@ -100,6 +149,13 @@ export async function GET(req: Request) {
     });
   } catch {
     clearTimeout(timeout);
+    if (zai) {
+      return NextResponse.json({
+        models: ZAI_CODING_MODELS,
+        detected: true,
+        error: null,
+      });
+    }
     return NextResponse.json(
       {
         models: [],

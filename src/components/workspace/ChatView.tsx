@@ -1,10 +1,26 @@
 "use client";
 
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/stores/useChatStore";
 import { AgentStepCard } from "./AgentStepCard";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
+
+function ApprovalActions() {
+  const [approvals, setApprovals] = useState<{ id: string; executionId?: string; action: string; description: string; status: string }[]>([]);
+  const refresh = async (active = true) => {
+    const res = await fetch("/api/approvals");
+    if (res.ok && active) setApprovals(((await res.json()) as { approvals?: typeof approvals }).approvals || []);
+  };
+  useEffect(() => { let active = true; window.setTimeout(() => void refresh(active), 0); const timer = window.setInterval(() => void refresh(active), 1500); return () => { active = false; window.clearInterval(timer); }; }, []);
+  const decide = async (approval: (typeof approvals)[number], decision: "approved" | "rejected") => {
+    await fetch(`/api/approvals/${encodeURIComponent(approval.id)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision }) });
+    if (decision === "approved" && approval.executionId) await fetch(`/api/executions/${encodeURIComponent(approval.executionId)}/resume`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approvalId: approval.id }) });
+    await refresh();
+  };
+  if (!approvals.some((approval) => approval.status === "pending")) return null;
+  return <div className="mx-auto w-full max-w-[820px] px-4 pb-2 flex flex-col gap-2">{approvals.filter((approval) => approval.status === "pending").map((approval) => <div key={approval.id} className="rounded-[10px] border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-foreground"><div className="font-medium">Approval required: {approval.description || approval.action}</div><div className="mt-2 flex gap-2"><button type="button" onClick={() => void decide(approval, "approved")} className="rounded-[7px] bg-accent-fill px-2.5 py-1 text-white">Approve</button><button type="button" onClick={() => void decide(approval, "rejected")} className="rounded-[7px] border border-ws-border px-2.5 py-1 text-ws-secondary">Reject</button></div></div>)}</div>;
+}
 
 export function ChatView({ tabId }: { tabId: string }) {
   const conv = useChatStore((s) => s.conversations[tabId]);
@@ -110,6 +126,7 @@ export function ChatView({ tabId }: { tabId: string }) {
           })}
         </div>
       </div>
+      <ApprovalActions />
       <div className="border-t border-ws-border p-3">
         <div className="mx-auto w-full max-w-[820px]">
           <Composer tabId={tabId} />

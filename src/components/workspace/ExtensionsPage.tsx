@@ -9,6 +9,7 @@ import {
   Github,
   Globe,
   ImagePlus,
+  Palette,
   Plus,
   Rocket,
   ScanSearch,
@@ -47,6 +48,14 @@ const EXTENSIONS: Extension[] = [
     category: "Design",
   },
   {
+    id: "canva",
+    name: "Canva",
+    description:
+      "Browse, import, and embed Canva designs and brand assets into your project workspace.",
+    icon: Palette,
+    category: "Design",
+  },
+  {
     id: "database",
     name: "Database",
     description:
@@ -75,7 +84,7 @@ const EXTENSIONS: Extension[] = [
     id: "deployment",
     name: "Deployment",
     description:
-      "Ship your project to Goodstuff-Agent hosting, Vercel, or Netlify with a single command from the agent.",
+      "Ship your project to Goodstuff-VYRA hosting, Vercel, or Netlify with a single command from the agent.",
     icon: Rocket,
     category: "Deploy",
   },

@@ -30,6 +30,7 @@ interface ProjectsState {
   renameProject: (id: string, name: string) => void;
   setRules: (projectId: string, rules: string) => void;
   addLegacy: (title: string) => void;
+  hydrateProjects: (projects: Array<{ id: string; name: string; description?: string; icon?: string; directory?: string; createdAt: string | number; archivedAt?: string | number | null; _count?: { conversations: number; executions: number; changes: number } }>) => void;
 }
 
 export const useProjectsStore = create<ProjectsState>()(
@@ -110,6 +111,12 @@ export const useProjectsStore = create<ProjectsState>()(
             ...s.legacy,
           ],
         })),
+      hydrateProjects: (records) => set((s) => ({
+        projects: records.map((p) => {
+          const existing = s.projects.find((x) => x.id === p.id);
+          return { id: p.id, name: p.name, description: p.description || "", icon: p.icon || "folder", directory: p.directory, createdAt: new Date(p.createdAt).getTime(), archivedAt: p.archivedAt ? new Date(p.archivedAt).getTime() : undefined, workspace: existing?.workspace ?? emptyWorkspace(), rules: existing?.rules ?? "", stats: p._count ? { conversations: p._count.conversations, executions: p._count.executions, changes: p._count.changes } : undefined };
+        }),
+      })),
     }),
     {
       name: "forge-projects",

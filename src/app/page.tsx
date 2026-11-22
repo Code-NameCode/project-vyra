@@ -107,6 +107,19 @@ export default function Home() {
 
   // make sure a conversation object exists for the active tab
   useEffect(() => {
+    // Repair first-run and stale persisted tab state after hydration. This
+    // must not run at module evaluation time because persisted Zustand
+    // storage is browser-only.
+    const app = useAppStore.getState();
+    if (app.tabs.length === 0) {
+      const id = app.newChatTab();
+      app.setActiveTab(id);
+    } else if (!app.activeTabId || !app.tabs.some((t) => t.id === app.activeTabId)) {
+      app.setActiveTab(app.tabs[0].id);
+    }
+  }, []);
+
+  useEffect(() => {
     if (activeTabId) ensure(activeTabId);
   }, [activeTabId, ensure]);
 

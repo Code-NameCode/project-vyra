@@ -14,11 +14,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Goodstuff-Agent — AI Coding Agent Workspace",
+  title: "Goodstuff-VYRA — AI Coding Agent Workspace",
   description:
-    "Goodstuff-Agent is an AI coding-agent workspace. Build apps, run agents, edit code and ship — all in one place.",
+    "Goodstuff-VYRA is an AI coding-agent workspace. Build apps, run agents, edit code and ship — all in one place.",
+  manifest: "/site.webmanifest",
   icons: {
-    icon: "/logo.svg",
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    shortcut: ["/favicon.ico"],
+    apple: "/apple-touch-icon.png",
   },
 };
 

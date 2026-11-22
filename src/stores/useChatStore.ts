@@ -56,6 +56,7 @@ interface ChatState {
 
   ensure: (tabId: string, modelId?: string) => Conversation;
   getConversation: (tabId: string) => Conversation | undefined;
+  hydrateConversation: (conversation: Conversation) => void;
   setComposerDraft: (tabId: string, text: string) => void;
   setModel: (tabId: string, modelId: string) => void;
   setBuildMode: (tabId: string, mode: BuildMode) => void;
@@ -72,6 +73,7 @@ interface ChatState {
   sendMessage: (tabId: string, text: string, modelId: string) => Promise<void>;
   stopStreaming: (tabId: string) => void;
   recordTerminal: (tabId: string, command: string, output: string) => void;
+  updateWorkspace: (tabId: string, updater: (ws: Workspace) => Workspace) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -81,15 +83,18 @@ export const useChatStore = create<ChatState>()(
   ensure: (tabId, modelId) => {
     const existing = get().conversations[tabId];
     if (existing) return existing;
+    const settings = useSettingsStore.getState();
     const conv = emptyConversation(
       tabId,
-      modelId ?? useSettingsStore.getState().defaultModelId
+      modelId ?? settings.defaultModelId
     );
+    conv.agentId = settings.defaultAgentId ?? "";
     set((s) => ({ conversations: { ...s.conversations, [tabId]: conv } }));
     return conv;
   },
 
   getConversation: (tabId) => get().conversations[tabId],
+  hydrateConversation: (conversation) => set((s) => ({ conversations: { ...s.conversations, [conversation.tabId]: conversation } })),
 
   setComposerDraft: (tabId, text) =>
     set((s) => {
@@ -338,19 +343,43 @@ export const useChatStore = create<ChatState>()(
     const controller = new AbortController();
     controllers.set(tabId, controller);
 
-    const apply = (mut: (c: Conversation) => Conversation) =>
-      set((s) => {
-        const c = s.conversations[tabId];
-        if (!c) return {};
-        return { conversations: { ...s.conversations, [tabId]: mut(c) } };
-      });
-
     // route workspace mutations (files/terminal/changes) to the linked
     // project's workspace when the active tab is a project tab, otherwise
     // to the conversation's own workspace.
     const projectId = useAppStore
       .getState()
       .tabs.find((t) => t.id === tabId)?.projectId;
+    const persistConversation = () => {
+      const snapshot = get().conversations[tabId];
+      if (!snapshot) return;
+      const tabTitle = useAppStore.getState().tabs.find((tab) => tab.id === tabId)?.title || snapshot.title;
+      void fetch(projectId ? `/api/projects/${encodeURIComponent(projectId)}/conversations` : "/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: tabId,
+          projectId,
+          title: tabTitle === "New chat" ? trimmed.slice(0, 80) : tabTitle,
+          modelId: snapshot.modelId,
+          titleSource: tabTitle && tabTitle !== "New chat" ? "manual" : "auto",
+          messages: snapshot.messages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            createdAt: message.createdAt,
+          })),
+        }),
+      }).catch(() => undefined);
+    };
+    const apply = (mut: (c: Conversation) => Conversation) =>
+      set((s) => {
+        const c = s.conversations[tabId];
+        if (!c) return {};
+        const next = mut(c);
+        queueMicrotask(persistConversation);
+        return { conversations: { ...s.conversations, [tabId]: next } };
+      });
+    persistConversation();
     const applyWorkspace = (mut: (ws: Workspace) => Workspace) => {
       if (projectId) {
         useProjectsStore.getState().updateWorkspace(projectId, mut);
@@ -391,6 +420,36 @@ export const useChatStore = create<ChatState>()(
     const isResearch = !!conv?.researchMode;
 
     try {
+      if (!isResearch) {
+        const projectId = useAppStore.getState().tabs.find((t) => t.id === tabId)?.projectId;
+        const createRes = await fetch("/api/executions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            request: trimmed,
+            modelId: reqModel,
+            projectId,
+            conversationId: tabId,
+            provider: { id: parsed?.providerId, type: providerType || "custom", baseUrl: reqBaseUrl, model: reqModel },
+            messages: [...history, { role: "user", content: trimmed }],
+          }),
+        });
+        if (!createRes.ok) throw new Error(`Execution failed (${createRes.status})`);
+        const created = (await createRes.json()) as { execution?: { id: string } };
+        if (!created.execution?.id) throw new Error("Execution did not return an id");
+        const eventRes = await fetch(`/api/executions/${encodeURIComponent(created.execution.id)}/events`, { signal: controller.signal });
+        await readSSE(eventRes, (event) => {
+          const evt = event as unknown as { type: string; text?: string; tool?: string; error?: string; approval?: unknown; summary?: unknown };
+          if (evt.type === "text") apply((c) => ({ ...c, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + (evt.text || "") } : m) }));
+          else if (evt.type === "tool_started") apply((c) => ({ ...c, steps: [...c.steps, { id: uid("step"), title: evt.tool || "Tool", kind: "run", status: "running", detail: "Executing tool", startedAt: Date.now() }] }));
+          else if (evt.type === "approval_required") apply((c) => ({ ...c, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, content: `${m.content}\n\n_Approval required for a restricted action._` } : m) }));
+          else if (evt.type === "failed") apply((c) => ({ ...c, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, content: `${m.content}\n\n**Execution failed**\n\n${evt.error || "Unknown error"}` } : m) }));
+          else if (evt.type === "completed" || evt.type === "cancelled") apply((c) => ({ ...c, streaming: false, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, streaming: false } : m) }));
+        }, controller.signal);
+        apply((c) => ({ ...c, streaming: false, messages: c.messages.map((m) => m.id === assistantMsg.id ? { ...m, streaming: false } : m) }));
+        return;
+      }
       const url = isResearch ? "/api/research" : "/api/chat";
       const res = await fetch(url, {
         method: "POST",
@@ -406,16 +465,42 @@ export const useChatStore = create<ChatState>()(
                 providerType,
                 providerId: parsed?.providerId,
                 messages: [...history, { role: "user", content: trimmed }],
-                apiKey: reqApiKey,
                 baseUrl: reqBaseUrl,
                 useRealApi: reqUseRealApi,
                 agentInstructions: settings.agentInstructions,
                 projectRules,
                 skills: conv?.skills ?? [],
+                 skillsFolderPath: useSettingsStore.getState().skillsFolderPath,
                 agentId: conv?.agentId ?? "",
             }
         ),
       });
+
+      if (!res.ok) {
+        let code = "HTTP_ERROR";
+        let message = `Request failed (${res.status})`;
+        try {
+          const data = await res.json();
+          code = data?.error?.code ?? code;
+          message = data?.error?.message ?? message;
+        } catch {
+          /* response wasn't JSON */
+        }
+        apply((c) => ({
+          ...c,
+          streaming: false,
+          messages: c.messages.map((m) =>
+            m.id === assistantMsg.id
+              ? {
+                  ...m,
+                  streaming: false,
+                  content: `**Error ${code}**\n\n${message}`,
+                }
+              : m
+          ),
+        }));
+        return;
+      }
 
       await readSSE(res, (evt: StreamEvent) => {
         switch (evt.type) {
@@ -519,6 +604,22 @@ export const useChatStore = create<ChatState>()(
             }));
             break;
           }
+          case "error": {
+            apply((c) => ({
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === assistantMsg.id
+                  ? {
+                      ...m,
+                      content:
+                        (m.content ? m.content + "\n\n" : "") +
+                        `**Error ${evt.code ?? "ERROR"}**\n\n${evt.message ?? "Unknown error"}`,
+                    }
+                  : m
+              ),
+            }));
+            break;
+          }
           case "done": {
             apply((c) => ({
               ...c,
@@ -584,6 +685,17 @@ export const useChatStore = create<ChatState>()(
               ],
             },
           },
+        },
+      };
+    }),
+  updateWorkspace: (tabId, updater) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: { ...conv, workspace: updater(conv.workspace) },
         },
       };
     }),

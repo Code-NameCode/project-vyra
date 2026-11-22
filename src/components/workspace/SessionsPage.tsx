@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Clock, MessageSquare, Plus, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Archive, Clock, MessageSquare, Pin, Plus, Sparkles } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 import { Input } from "@/components/ui/input";
@@ -51,7 +51,14 @@ function modelName(id: string): string {
 
 export function SessionsPage() {
   const conversations = useChatStore((s) => s.conversations);
+  const hydrateConversation = useChatStore((s) => s.hydrateConversation);
   const [query, setQuery] = useState("");
+  const [serverSessions, setServerSessions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams({ take: "100", query });
+    fetch(`/api/conversations?${params}`).then((r) => r.ok ? r.json() : null).then((data) => { if (data?.conversations) setServerSessions(data.conversations); }).catch(() => undefined);
+  }, [query]);
 
   const totalCount = useMemo(
     () => Object.values(conversations).filter((c) => c.started).length,
@@ -59,6 +66,15 @@ export function SessionsPage() {
   );
 
   const sessions = useMemo(() => {
+    if (serverSessions.length) return serverSessions.map((s) => ({
+      ...s,
+      tabId: s.id,
+      title: s.title,
+      modelId: s.modelId,
+      updatedAt: new Date(s.updatedAt).getTime(),
+      messages: (s.messages || []).map((m: any) => ({ id: m.id, role: m.role, content: m.content, createdAt: new Date(m.createdAt).getTime() })),
+      started: true,
+    })) as Conversation[];
     const all = Object.values(conversations).filter((c) => c.started);
     const sorted = [...all].sort((a, b) => b.updatedAt - a.updatedAt);
     const q = query.trim().toLowerCase();
@@ -74,11 +90,26 @@ export function SessionsPage() {
         stripMarkdown(m.content).toLowerCase().includes(q)
       );
     });
-  }, [conversations, query]);
+  }, [conversations, query, serverSessions]);
 
-  const openSession = (conv: Conversation) => {
+  const openSession = async (conv: Conversation) => {
+    if (serverSessions.some((s) => s.id === conv.tabId)) {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(conv.tabId)}`);
+      const payload = await response.json().catch(() => null);
+      const record = payload?.conversation;
+      if (record) {
+        hydrateConversation({ ...conv, projectId: record.projectId || undefined, messages: record.messages.map((m: any) => ({ id: m.id, role: m.role, content: m.content, createdAt: new Date(m.createdAt).getTime() })) });
+      }
+    }
     const title = conv.title || firstUserPreview(conv) || "New chat";
     useAppStore.getState().openSession(conv.tabId, title);
+  };
+
+  const mutateSession = async (id: string, body: Record<string, unknown>) => {
+    await fetch(`/api/conversations/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const params = new URLSearchParams({ take: "100", query });
+    const refreshed = await fetch(`/api/conversations?${params}`).then((r) => r.json()).catch(() => null);
+    if (refreshed?.conversations) setServerSessions(refreshed.conversations);
   };
 
   return (
@@ -177,6 +208,8 @@ export function SessionsPage() {
                         addSuffix: true,
                       })}
                     </span>
+                    <button type="button" title={conv.pinnedAt ? "Unpin" : "Pin"} onClick={(e) => { e.stopPropagation(); void mutateSession(conv.tabId, { pin: !conv.pinnedAt }); }} className="ml-auto hover:text-foreground"><Pin className="size-3.5" /></button>
+                    <button type="button" title={conv.archivedAt ? "Restore" : "Archive"} onClick={(e) => { e.stopPropagation(); void mutateSession(conv.tabId, { archive: !conv.archivedAt }); }} className="hover:text-foreground"><Archive className="size-3.5" /></button>
                   </div>
                 </div>
               );

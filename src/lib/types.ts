@@ -108,6 +108,7 @@ export interface Project {
   name: string;
   templateId?: string;
   createdAt: number;
+  workspace: Workspace;
 }
 
 export interface LegacyChat {

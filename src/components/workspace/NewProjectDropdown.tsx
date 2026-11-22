@@ -10,22 +10,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAppStore } from "@/stores/useAppStore";
 import { useProjectsStore } from "@/stores/useProjectsStore";
 
 /**
  * NewProjectDropdown — the centered "+ New project" outlined pill button.
- * Reads nothing from props; uses the projects store when creating a project.
  */
 export function NewProjectDropdown() {
   const addProject = useProjectsStore((s) => s.addProject);
+  const openProject = useAppStore((s) => s.openProject);
+  const setRailPage = useAppStore((s) => s.setRailPage);
 
   const handleBlank = () => {
-    addProject("Untitled project");
+    const id = addProject("Untitled project");
+    openProject(id, "Untitled project");
     toast.success("Project created");
   };
 
   const handleTemplate = () => {
-    toast("Pick a template below");
+    setRailPage("templates");
   };
 
   const handleComingSoon = (label: string) => {

@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/tooltip";
 import { useAppStore } from "@/stores/useAppStore";
 import { useChatStore } from "@/stores/useChatStore";
+import { useProjectsStore } from "@/stores/useProjectsStore";
 import { cn } from "@/lib/utils";
-import type { RightPanelView } from "@/lib/types";
+import type { RightPanelView, Conversation } from "@/lib/types";
 import { OverviewView } from "./panel/OverviewView";
 import { BrowserView } from "./panel/BrowserView";
 import { FilesView } from "./panel/FilesView";
@@ -84,12 +85,26 @@ export function RightPanel() {
   const setRightPanelView = useAppStore((s) => s.setRightPanelView);
   const setRightPanelOpen = useAppStore((s) => s.setRightPanelOpen);
   const activeTabId = useAppStore((s) => s.activeTabId);
+  const projectId = useAppStore((s) =>
+    s.tabs.find((t) => t.id === s.activeTabId)?.projectId
+  );
   const conv = useChatStore((s) =>
     activeTabId ? s.conversations[activeTabId] : undefined
   );
+  const projectWorkspace = useProjectsStore((s) =>
+    projectId
+      ? s.projects.find((p) => p.id === projectId)?.workspace
+      : undefined
+  );
+  // surface the linked project's workspace (files/terminal/changes) when a
+  // project tab is active, while keeping the conversation's steps/messages.
+  const effectiveConv: Conversation | undefined =
+    projectId && projectWorkspace && conv
+      ? { ...conv, workspace: projectWorkspace }
+      : conv;
 
-  const hasArtifacts = (conv?.workspace.artifacts.length ?? 0) > 0;
-  const started = !!conv?.started;
+  const hasArtifacts = (effectiveConv?.workspace.artifacts.length ?? 0) > 0;
+  const started = !!effectiveConv?.started;
   const viewLabel = rightPanelView ? VIEW_LABELS[rightPanelView] : null;
 
   return (
@@ -166,12 +181,12 @@ export function RightPanel() {
             )}
           </div>
           <div className="flex-1 min-h-0 flex flex-col" key={activeTabId}>
-            {rightPanelView === "overview" && <OverviewView conv={conv} />}
-            {rightPanelView === "browser" && <BrowserView conv={conv} />}
-            {rightPanelView === "files" && <FilesView conv={conv} />}
-            {rightPanelView === "terminal" && <TerminalView conv={conv} />}
-            {rightPanelView === "changes" && <ChangesView conv={conv} />}
-            {rightPanelView === "artifacts" && <ArtifactsView conv={conv} />}
+            {rightPanelView === "overview" && <OverviewView conv={effectiveConv} />}
+            {rightPanelView === "browser" && <BrowserView conv={effectiveConv} />}
+            {rightPanelView === "files" && <FilesView conv={effectiveConv} />}
+            {rightPanelView === "terminal" && <TerminalView conv={effectiveConv} />}
+            {rightPanelView === "changes" && <ChangesView conv={effectiveConv} />}
+            {rightPanelView === "artifacts" && <ArtifactsView conv={effectiveConv} />}
           </div>
         </div>
       )}

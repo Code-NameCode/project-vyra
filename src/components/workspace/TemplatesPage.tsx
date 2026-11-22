@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import templatesData from "@/data/templates.json";
 import type { TemplateDef } from "@/lib/types";
-import { useAppStore } from "@/stores/useAppStore";
 import { useChatStore } from "@/stores/useChatStore";
 import { ThumbnailArt } from "./ThumbnailArt";
 
@@ -48,9 +47,9 @@ export function TemplatesPage() {
   }, [filter]);
 
   const handlePick = (t: TemplateDef) => {
-    // always start a fresh chat tab so the template begins a new project
-    const tabId = useAppStore.getState().newChatTab();
-    useChatStore.getState().prefillFromTemplate(tabId, t.prompt, t.title, t.id);
+    // creates a project (with its own workspace) + opens a project tab
+    // prefilled with the template prompt
+    useChatStore.getState().startFromTemplate(t.prompt, t.title, t.id);
     toast.success("Template loaded");
   };
 

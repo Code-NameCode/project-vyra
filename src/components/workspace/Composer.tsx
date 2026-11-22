@@ -245,8 +245,8 @@ export function Composer({ tabId }: { tabId: string }) {
         <div
           className={cn(
             "absolute bottom-full mb-2 left-0 w-[300px] z-30",
-            "rounded-[10px] border border-ws-border bg-popover p-1 ws-fade-in",
-            "shadow-lg max-h-[260px] overflow-y-auto ws-scroll"
+            "rounded-[12px] border border-ws-border bg-popover p-1.5 ws-fade-in",
+            "shadow-2xl max-h-[260px] overflow-y-auto ws-scroll"
           )}
           role="listbox"
         >
@@ -278,9 +278,9 @@ export function Composer({ tabId }: { tabId: string }) {
       {/* composer box */}
       <div
         className={cn(
-          "relative rounded-[14px] border-2 border-[#3a3d41] border-b-[#44474b]",
-          "bg-card-ws p-3 min-h-[96px] transition-colors",
-          "focus-within:border-accent-fill/60"
+          "relative rounded-[14px] border border-ws-border",
+          "bg-card-ws p-3.5 transition-colors duration-150",
+          "focus-within:border-accent-fill/50"
         )}
       >
         <Textarea
@@ -292,16 +292,16 @@ export function Composer({ tabId }: { tabId: string }) {
           placeholder="Ask Forge... Use / for commands"
           className={cn(
             "bg-transparent border-0 resize-none p-0 m-0",
-            "text-[15px] leading-[1.5] text-foreground",
-            "placeholder:text-ws-secondary",
+            "text-[15px] leading-[1.55] text-foreground",
+            "placeholder:text-ws-secondary/80",
             "focus-visible:ring-0 outline-none shadow-none",
-            "max-h-[200px] min-h-[24px] ws-scroll",
+            "max-h-[200px] min-h-[28px] ws-scroll",
             "[field-sizing:none]"
           )}
         />
 
         {/* bottom row */}
-        <div className="flex items-center justify-between mt-2 gap-2">
+        <div className="flex items-center justify-between mt-2.5 gap-2">
           {/* left: attach */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -309,8 +309,8 @@ export function Composer({ tabId }: { tabId: string }) {
                 type="button"
                 aria-label="Attach"
                 className={cn(
-                  "inline-flex items-center justify-center size-9",
-                  "rounded-[8px] text-ws-secondary hover:bg-hover",
+                  "inline-flex items-center justify-center size-8",
+                  "rounded-[8px] text-ws-secondary hover:bg-hover hover:text-foreground",
                   "transition-colors focus-ring"
                 )}
               >
@@ -343,15 +343,15 @@ export function Composer({ tabId }: { tabId: string }) {
           </DropdownMenu>
 
           {/* right: model picker + send */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <ModelPicker tabId={tabId} open={modelOpen} onOpenChange={setModelOpen} />
             <button
               type="button"
               onClick={onSendClick}
               aria-label={sendLabel}
               className={cn(
-                "inline-flex items-center justify-center size-9",
-                "rounded-[10px] bg-accent-fill text-white",
+                "inline-flex items-center justify-center size-8",
+                "rounded-[8px] bg-accent-fill text-white",
                 "hover:bg-accent-hi transition-colors focus-ring"
               )}
             >

@@ -60,17 +60,7 @@ export function TemplateGallery() {
   };
 
   const handlePick = (t: TemplateDef) => {
-    const activeTabId = useAppStore.getState().activeTabId;
-    if (!activeTabId) {
-      toast.error("No active tab");
-      return;
-    }
-    useChatStore.getState().prefillFromTemplate(
-      activeTabId,
-      t.prompt,
-      t.title,
-      t.id
-    );
+    useChatStore.getState().startFromTemplate(t.prompt, t.title, t.id);
     toast.success("Template loaded");
   };
 

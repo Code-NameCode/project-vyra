@@ -55,7 +55,7 @@ export function CommandPalette() {
 
   const projects = useProjectsStore((s) => s.projects);
 
-  const prefillFromTemplate = useChatStore((s) => s.prefillFromTemplate);
+  const prefillFromTemplate = useChatStore((s) => s.startFromTemplate);
   const defaultModelId = useSettingsStore((s) => s.defaultModelId);
   const setDefaultModelId = useSettingsStore((s) => s.setDefaultModelId);
 
@@ -187,7 +187,7 @@ export function CommandPalette() {
                     value={`project ${p.name}`}
                     onSelect={() =>
                       runAction(() => {
-                        toast.message("Opening project…");
+                        useAppStore.getState().openProject(p.id, p.name);
                       })
                     }
                     className="text-[13px]"
@@ -210,13 +210,7 @@ export function CommandPalette() {
                     value={`template ${tpl.title} ${tpl.category}`}
                     onSelect={() =>
                       runAction(() => {
-                        if (!activeTabId) return;
-                        prefillFromTemplate(
-                          activeTabId,
-                          tpl.prompt,
-                          tpl.title,
-                          tpl.id
-                        );
+                        prefillFromTemplate(tpl.prompt, tpl.title, tpl.id);
                       })
                     }
                     className="text-[13px]"

@@ -14,8 +14,6 @@ import { TemplatesPage } from "@/components/workspace/TemplatesPage";
 import { ExtensionsPage } from "@/components/workspace/ExtensionsPage";
 import { CommandPalette } from "@/components/workspace/CommandPalette";
 import { SettingsModal } from "@/components/workspace/modals/SettingsModal";
-import { UpgradeModal } from "@/components/workspace/modals/UpgradeModal";
-import { InviteModal } from "@/components/workspace/modals/InviteModal";
 import { HoursExhaustedModal } from "@/components/workspace/modals/HoursExhaustedModal";
 import {
   Sheet,
@@ -239,8 +237,6 @@ export default function Home() {
       {/* overlays / modals */}
       <CommandPalette />
       <SettingsModal />
-      <UpgradeModal />
-      <InviteModal />
       <HoursExhaustedModal />
     </div>
   );

@@ -18,6 +18,7 @@ interface AppState {
   setActiveTab: (id: string) => void;
   openTab: (tab: Tab) => void;
   openSession: (sessionId: string, title: string) => void;
+  openProject: (projectId: string, name: string) => string;
   closeTab: (id: string) => void;
   newChatTab: () => string;
   renameTab: (id: string, title: string) => void;
@@ -42,10 +43,6 @@ interface AppState {
   setSearchOpen: (v: boolean) => void;
   settingsOpen: boolean;
   setSettingsOpen: (v: boolean) => void;
-  upgradeOpen: boolean;
-  setUpgradeOpen: (v: boolean) => void;
-  inviteOpen: boolean;
-  setInviteOpen: (v: boolean) => void;
   hoursExhaustedOpen: boolean;
   setHoursExhaustedOpen: (v: boolean) => void;
 
@@ -62,7 +59,7 @@ function makeTab(type: TabType = "chat", title = "New chat"): Tab {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       mode: "code",
       setMode: (m) => set({ mode: m }),
       toggleMode: () => set((s) => ({ mode: s.mode === "code" ? "chat" : "code" })),
@@ -94,6 +91,26 @@ export const useAppStore = create<AppState>()(
           };
           return { tabs: [...s.tabs, tab], activeTabId: tab.id, railPage: "home" };
         }),
+      // open (or focus) a project workspace tab linked to a project
+      openProject: (projectId, name) => {
+        const s = get();
+        const existing = s.tabs.find(
+          (t) => t.projectId === projectId
+        );
+        if (existing) {
+          set({ activeTabId: existing.id, railPage: "home" });
+          return existing.id;
+        }
+        const tab: Tab = {
+          id: uid("tab"),
+          title: name || "Project",
+          type: "project",
+          projectId,
+          createdAt: Date.now(),
+        };
+        set({ tabs: [...s.tabs, tab], activeTabId: tab.id, railPage: "home" });
+        return tab.id;
+      },
       closeTab: (id) =>
         set((s) => {
           const idx = s.tabs.findIndex((t) => t.id === id);
@@ -146,10 +163,6 @@ export const useAppStore = create<AppState>()(
       setSearchOpen: (v) => set({ searchOpen: v }),
       settingsOpen: false,
       setSettingsOpen: (v) => set({ settingsOpen: v }),
-      upgradeOpen: false,
-      setUpgradeOpen: (v) => set({ upgradeOpen: v }),
-      inviteOpen: false,
-      setInviteOpen: (v) => set({ inviteOpen: v }),
       hoursExhaustedOpen: false,
       setHoursExhaustedOpen: (v) => set({ hoursExhaustedOpen: v }),
 

@@ -61,12 +61,7 @@ interface ChatState {
   setComposerDraft: (tabId: string, text: string) => void;
   setModel: (tabId: string, modelId: string) => void;
   clearConversation: (tabId: string) => void;
-  prefillFromTemplate: (
-    tabId: string,
-    prompt: string,
-    title: string,
-    templateId: string
-  ) => void;
+  startFromTemplate: (prompt: string, title: string, templateId: string) => void;
   sendMessage: (tabId: string, text: string, modelId: string) => Promise<void>;
   stopStreaming: (tabId: string) => void;
   recordTerminal: (tabId: string, command: string, output: string) => void;
@@ -128,21 +123,24 @@ export const useChatStore = create<ChatState>()(
       };
     }),
 
-  prefillFromTemplate: (tabId, prompt, title, templateId) => {
-        get().ensure(tabId);
-        useProjectsStore.getState().addProject(title, templateId);
-        useAppStore.getState().renameTab(tabId, title);
-        set((s) => {
-          const conv = s.conversations[tabId];
-          if (!conv) return {};
-          return {
-            conversations: {
-              ...s.conversations,
-              [tabId]: { ...conv, composerDraft: prompt },
-            },
-          };
-        });
-      },
+  startFromTemplate: (prompt, title, templateId) => {
+    // create a project (with its own workspace) + open a project tab,
+    // then prefill that tab's composer with the template prompt.
+    const pid = useProjectsStore.getState().addProject(title, templateId);
+    const tabId = useAppStore.getState().openProject(pid, title);
+    get().ensure(tabId);
+    useAppStore.getState().renameTab(tabId, title);
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: { ...conv, composerDraft: prompt },
+        },
+      };
+    });
+  },
 
   sendMessage: async (tabId, text, modelId) => {
     const trimmed = text.trim();
@@ -238,6 +236,20 @@ export const useChatStore = create<ChatState>()(
         return { conversations: { ...s.conversations, [tabId]: mut(c) } };
       });
 
+    // route workspace mutations (files/terminal/changes) to the linked
+    // project's workspace when the active tab is a project tab, otherwise
+    // to the conversation's own workspace.
+    const projectId = useAppStore
+      .getState()
+      .tabs.find((t) => t.id === tabId)?.projectId;
+    const applyWorkspace = (mut: (ws: Workspace) => Workspace) => {
+      if (projectId) {
+        useProjectsStore.getState().updateWorkspace(projectId, mut);
+      } else {
+        apply((c) => ({ ...c, workspace: mut(c.workspace) }));
+      }
+    };
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -291,11 +303,9 @@ export const useChatStore = create<ChatState>()(
             break;
           }
           case "file": {
-            apply((c) => {
+            applyWorkspace((ws) => {
               const path = evt.path;
-              const exists = c.workspace.files.some(
-                (f) => f.path === path
-              );
+              const exists = ws.files.some((f) => f.path === path);
               const node = {
                 id: uid("file"),
                 name: path.split("/").pop() || path,
@@ -308,62 +318,53 @@ export const useChatStore = create<ChatState>()(
                   | "modified",
               };
               return {
-                ...c,
-                workspace: {
-                  ...c.workspace,
-                  files: exists
-                    ? c.workspace.files.map((f) =>
-                        f.path === path ? { ...f, ...node } : f
-                      )
-                    : [...c.workspace.files, node],
-                },
+                ...ws,
+                files: exists
+                  ? ws.files.map((f) =>
+                      f.path === path ? { ...f, ...node } : f
+                    )
+                  : [...ws.files, node],
               };
             });
             break;
           }
           case "terminal": {
-            apply((c) => ({
-              ...c,
-              workspace: {
-                ...c.workspace,
-                terminal: [
-                  ...c.workspace.terminal,
-                  { id: uid("term"), kind: "in" as const, text: evt.command },
-                  { id: uid("term"), kind: "out" as const, text: evt.output },
-                ],
-              },
+            applyWorkspace((ws) => ({
+              ...ws,
+              terminal: [
+                ...ws.terminal,
+                { id: uid("term"), kind: "in" as const, text: evt.command },
+                { id: uid("term"), kind: "out" as const, text: evt.output },
+              ],
             }));
             break;
           }
           case "change": {
-            apply((c) => ({
-              ...c,
-              workspace: {
-                ...c.workspace,
-                changes: c.workspace.changes.some((ch) => ch.path === evt.path)
-                  ? c.workspace.changes.map((ch) =>
-                      ch.path === evt.path
-                        ? {
-                            ...ch,
-                            status: evt.status,
-                            additions: evt.additions,
-                            deletions: evt.deletions,
-                            diff: evt.diff,
-                          }
-                        : ch
-                    )
-                  : [
-                      ...c.workspace.changes,
-                      {
-                        id: uid("change"),
-                        path: evt.path,
-                        status: evt.status,
-                        additions: evt.additions,
-                        deletions: evt.deletions,
-                        diff: evt.diff,
-                      },
-                    ],
-              },
+            applyWorkspace((ws) => ({
+              ...ws,
+              changes: ws.changes.some((ch) => ch.path === evt.path)
+                ? ws.changes.map((ch) =>
+                    ch.path === evt.path
+                      ? {
+                          ...ch,
+                          status: evt.status,
+                          additions: evt.additions,
+                          deletions: evt.deletions,
+                          diff: evt.diff,
+                        }
+                      : ch
+                  )
+                : [
+                    ...ws.changes,
+                    {
+                      id: uid("change"),
+                      path: evt.path,
+                      status: evt.status,
+                      additions: evt.additions,
+                      deletions: evt.deletions,
+                      diff: evt.diff,
+                    },
+                  ],
             }));
             break;
           }

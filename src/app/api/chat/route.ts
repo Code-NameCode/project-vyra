@@ -17,6 +17,31 @@ interface ChatRequestBody {
   useRealApi?: boolean;
   agentInstructions?: string;
   projectRules?: string;
+  skills?: string[];
+  agentId?: string;
+}
+
+const AGENT_NAMES: Record<string, string> = {
+  codex: "Codex",
+  cline: "Cline",
+  opencode: "OpenCode",
+  kilocode: "KiloCode",
+  pi: "Pi",
+  zcode: "ZCode",
+  hermes: "Hermes",
+  omipy: "OmiPy",
+};
+
+function buildContextLine(agentId?: string, skills?: string[]): string {
+  const parts: string[] = [];
+  if (agentId) {
+    const name = AGENT_NAMES[agentId] ?? agentId;
+    parts.push(`Running with **${name}**`);
+  }
+  if (skills && skills.length) {
+    parts.push(`skills: ${skills.map((s) => `\`/${s}\``).join(", ")}`);
+  }
+  return parts.length ? `_${parts.join(" \u00b7 ")}_` : "";
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -164,12 +189,14 @@ export async function POST(req: NextRequest) {
   const buildMode = body.buildMode ?? "build";
   const topic = deriveTopic(messages);
   const title = titleCase(topic);
+  const contextLine = buildContextLine(body.agentId, body.skills ?? []);
   const finalAnswer =
-    buildMode === "plan"
+    (contextLine ? contextLine + "\n\n" : "") +
+    (buildMode === "plan"
       ? buildPlanAnswer(topic, title)
       : mode === "code"
       ? buildCodeAnswer(title)
-      : buildChatAnswer(topic);
+      : buildChatAnswer(topic));
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {

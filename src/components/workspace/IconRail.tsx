@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Boxes, CircleHelp, Home, Layers, LayoutGrid, Settings } from "lucide-react";
+import { Boxes, CircleHelp, FolderKanban, Home, Layers, LayoutGrid, Settings } from "lucide-react";
 import { useAppStore } from "@/stores/useAppStore";
 import type { RailPage } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,7 @@ export function IconRail() {
   const items: RailItemDef[] = [
     { key: "home", label: "Home", icon: Home, page: "home" },
     { key: "sessions", label: "Sessions", icon: Layers, page: "sessions" },
+    { key: "projects", label: "Projects", icon: FolderKanban, page: "projects" },
     { key: "templates", label: "Templates", icon: LayoutGrid, page: "templates" },
     { key: "extensions", label: "Extensions", icon: Boxes, page: "extensions" },
     { key: "settings", label: "Settings", icon: Settings, action: () => setSettingsOpen(true) },

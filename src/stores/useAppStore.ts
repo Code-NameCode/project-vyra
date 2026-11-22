@@ -32,8 +32,11 @@ interface AppState {
   toggleRightPanel: () => void;
   setRightPanelOpen: (v: boolean) => void;
 
-  rightPanelView: RightPanelView | null;
-  setRightPanelView: (v: RightPanelView | null) => void;
+  rightTabs: RightPanelView[];
+  rightActiveTab: number;
+  openRightTab: (view: RightPanelView) => void;
+  closeRightTab: (index: number) => void;
+  setRightActiveTab: (index: number) => void;
 
   rightTabOpen: boolean;
   setRightTabOpen: (v: boolean) => void;
@@ -151,8 +154,40 @@ export const useAppStore = create<AppState>()(
         })),
       setRightPanelOpen: (v) => set({ rightPanelOpen: v, rightTabOpen: v }),
 
-      rightPanelView: null,
-      setRightPanelView: (v) => set({ rightPanelView: v }),
+      rightTabs: [],
+      rightActiveTab: 0,
+      openRightTab: (view) =>
+        set((s) => {
+          const idx = s.rightTabs.indexOf(view);
+          if (idx !== -1) {
+            return {
+              rightTabs: s.rightTabs,
+              rightActiveTab: idx,
+              rightPanelOpen: true,
+              rightTabOpen: true,
+            };
+          }
+          const tabs = [...s.rightTabs, view];
+          return {
+            rightTabs: tabs,
+            rightActiveTab: tabs.length - 1,
+            rightPanelOpen: true,
+            rightTabOpen: true,
+          };
+        }),
+      closeRightTab: (index) =>
+        set((s) => {
+          const tabs = s.rightTabs.filter((_, i) => i !== index);
+          let active = s.rightActiveTab;
+          if (tabs.length === 0) {
+            return { rightTabs: [], rightActiveTab: 0 };
+          }
+          if (index <= s.rightActiveTab) {
+            active = Math.max(0, s.rightActiveTab - 1);
+          }
+          return { rightTabs: tabs, rightActiveTab: active };
+        }),
+      setRightActiveTab: (index) => set({ rightActiveTab: index }),
 
       rightTabOpen: false,
       setRightTabOpen: (v) => set({ rightTabOpen: v }),
@@ -176,7 +211,8 @@ export const useAppStore = create<AppState>()(
         activeTabId: s.activeTabId,
         sidebarCollapsed: s.sidebarCollapsed,
         rightPanelOpen: s.rightPanelOpen,
-        rightPanelView: s.rightPanelView,
+        rightTabs: s.rightTabs,
+        rightActiveTab: s.rightActiveTab,
         rightTabOpen: s.rightTabOpen,
       }),
     }

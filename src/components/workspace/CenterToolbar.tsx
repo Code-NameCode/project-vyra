@@ -56,9 +56,9 @@ function ToolButton({
 
 export function CenterToolbar() {
   const rightPanelOpen = useAppStore((s) => s.rightPanelOpen);
-  const rightPanelView = useAppStore((s) => s.rightPanelView);
-  const setRightPanelView = useAppStore((s) => s.setRightPanelView);
-  const setRightPanelOpen = useAppStore((s) => s.setRightPanelOpen);
+  const rightTabs = useAppStore((s) => s.rightTabs);
+  const rightActiveTab = useAppStore((s) => s.rightActiveTab);
+  const openRightTab = useAppStore((s) => s.openRightTab);
   const toggleRightPanel = useAppStore((s) => s.toggleRightPanel);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const conv = useChatStore((s) =>
@@ -66,36 +66,29 @@ export function CenterToolbar() {
   );
   const started = !!conv?.started;
 
+  const activeView = rightTabs[rightActiveTab];
+
   return (
     <div className="flex items-center gap-1">
       <ToolButton
         label="Overview"
         icon={List}
-        onClick={() => {
-          setRightPanelView("overview");
-          setRightPanelOpen(true);
-        }}
-        active={rightPanelOpen && rightPanelView === "overview"}
+        onClick={() => openRightTab("overview")}
+        active={rightPanelOpen && activeView === "overview"}
         disabled={!started}
         disabledTooltip="Start a project first"
       />
       <ToolButton
         label="Terminal"
         icon={TerminalSquare}
-        onClick={() => {
-          setRightPanelView("terminal");
-          setRightPanelOpen(true);
-        }}
-        active={rightPanelOpen && rightPanelView === "terminal"}
+        onClick={() => openRightTab("terminal")}
+        active={rightPanelOpen && activeView === "terminal"}
       />
       <ToolButton
         label="Files"
         icon={Folder}
-        onClick={() => {
-          setRightPanelView("files");
-          setRightPanelOpen(true);
-        }}
-        active={rightPanelOpen && rightPanelView === "files"}
+        onClick={() => openRightTab("files")}
+        active={rightPanelOpen && activeView === "files"}
       />
       <ToolButton
         label={rightPanelOpen ? "Close panel" : "Open panel"}

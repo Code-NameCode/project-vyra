@@ -4,10 +4,15 @@ import * as React from "react";
 import {
   ArrowUp,
   BookOpen,
+  Bot,
   Brain,
+  Check,
+  ChevronDown,
   CircleHelp,
+  Code2,
   Cpu,
   Eraser,
+  Feather,
   File,
   FileText,
   FlaskConical,
@@ -22,7 +27,10 @@ import {
   Shuffle,
   Sparkles,
   Square,
+  TerminalSquare,
   Wrench,
+  X,
+  Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -35,12 +43,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useChatStore } from "@/stores/useChatStore";
 import { useAppStore } from "@/stores/useAppStore";
 import { useProjectsStore } from "@/stores/useProjectsStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { SLASH_COMMANDS } from "@/data/slashCommands";
+import { AGENTS } from "@/data/agents";
 import type {
+  AgentDef,
   Conversation,
   FileNode,
   SlashCommand,
@@ -103,6 +118,22 @@ function skillIcon(key?: string): LucideIcon {
   return Sparkles;
 }
 
+/* ---- agent icon map ---- */
+const AGENT_ICON: Record<string, LucideIcon> = {
+  terminal: TerminalSquare,
+  bot: Bot,
+  code: Code2,
+  zap: Zap,
+  brain: Brain,
+  shuffle: Shuffle,
+  feather: Feather,
+  flask: FlaskConical,
+};
+function agentIcon(key?: string): LucideIcon {
+  if (key && AGENT_ICON[key]) return AGENT_ICON[key];
+  return Bot;
+}
+
 /* ---- @ context reference item ---- */
 type SlashCommandWithIcon = SlashCommand & { icon?: string };
 interface RefItem {
@@ -113,11 +144,17 @@ interface RefItem {
 }
 const EMPTY_FILES: FileNode[] = [];
 
+/** Strip a leading `/` from a slash command label (e.g. "/review" -> "review"). */
+function stripSlash(label: string): string {
+  return label.replace(/^\//, "");
+}
+
 /**
  * Composer — the core prompt input.
- * Auto-growing textarea, slash command popup (with skill icons), Codex-style
- * `@` context referencing, attach menu, Plan/Build mode selector, model
- * picker chip, and a send/stop/voice button.
+ * Auto-growing textarea, slash command popup (with skill icons) that adds
+ * action skills as removable chips, Codex-style `@` context referencing,
+ * attach menu, Plan/Build mode selector, agent picker chip, model picker
+ * chip, and a send/stop/voice button.
  */
 export function Composer({ tabId }: { tabId: string }) {
   const ensure = useChatStore((s) => s.ensure);
@@ -131,6 +168,19 @@ export function Composer({ tabId }: { tabId: string }) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const stopStreaming = useChatStore((s) => s.stopStreaming);
   const clearConversation = useChatStore((s) => s.clearConversation);
+
+  /* ---- skills (multi-chip) ---- */
+  const skills = useChatStore(
+    (s) => s.conversations[tabId]?.skills ?? []
+  );
+  const addSkill = useChatStore((s) => s.addSkill);
+  const removeSkill = useChatStore((s) => s.removeSkill);
+
+  /* ---- agent picker ---- */
+  const agentId = useChatStore(
+    (s) => s.conversations[tabId]?.agentId ?? ""
+  );
+  const setAgent = useChatStore((s) => s.setAgent);
 
   /* ---- Plan / Build mode (defensive: works with or without store support) ---- */
   const storeBuildMode = useChatStore(
@@ -193,6 +243,7 @@ export function Composer({ tabId }: { tabId: string }) {
 
   const taRef = React.useRef<HTMLTextAreaElement>(null);
   const [modelOpen, setModelOpen] = React.useState(false);
+  const [agentOpen, setAgentOpen] = React.useState(false);
   const [slashSuppressed, setSlashSuppressed] = React.useState(false);
   const [selIndex, setSelIndex] = React.useState(0);
   const [atSuppressed, setAtSuppressed] = React.useState(false);
@@ -289,6 +340,13 @@ export function Composer({ tabId }: { tabId: string }) {
 
   const selectCommand = React.useCallback(
     (cmd: SlashCommand) => {
+      // Read the live draft + skills from the store to avoid stale closures.
+      const currentDraft =
+        useChatStore.getState().conversations[tabId]?.composerDraft ?? "";
+      const beforeSlash = currentDraft.slice(0, currentDraft.lastIndexOf("/"));
+      const focusTextarea = () =>
+        requestAnimationFrame(() => taRef.current?.focus());
+
       if (cmd.id === "model") {
         setComposerDraft(tabId, "");
         setModelOpen(true);
@@ -307,12 +365,40 @@ export function Composer({ tabId }: { tabId: string }) {
         });
         return;
       }
-      // default: insert command label + trailing space, popup auto-closes
-      setComposerDraft(tabId, `${cmd.label} `);
-      // keep focus in textarea
-      requestAnimationFrame(() => taRef.current?.focus());
+      if (cmd.id === "plan") {
+        setBuildMode("plan");
+        setComposerDraft(tabId, beforeSlash);
+        toast("Switched to Plan");
+        focusTextarea();
+        return;
+      }
+      if (cmd.id === "build") {
+        setBuildMode("build");
+        setComposerDraft(tabId, beforeSlash);
+        toast("Switched to Build");
+        focusTextarea();
+        return;
+      }
+      // action skills (review, test, fix, explain, refactor, document, init):
+      // add as a removable chip instead of inserting text.
+      const currentSkills =
+        useChatStore.getState().conversations[tabId]?.skills ?? [];
+      if (currentSkills.includes(cmd.id)) {
+        toast("Already added");
+      } else {
+        addSkill(tabId, cmd.id);
+        toast(`${stripSlash(cmd.label)} skill added`);
+      }
+      setComposerDraft(tabId, beforeSlash);
+      focusTextarea();
     },
-    [tabId, setComposerDraft, clearConversation]
+    [
+      tabId,
+      setComposerDraft,
+      clearConversation,
+      addSkill,
+      setBuildMode,
+    ]
   );
 
   const selectRef = React.useCallback(
@@ -439,6 +525,18 @@ export function Composer({ tabId }: { tabId: string }) {
   const SendIcon = sendState === "stop" ? Square : sendState === "send" ? ArrowUp : Mic;
   const sendLabel = sendState === "stop" ? "Stop" : sendState === "send" ? "Send" : "Voice";
 
+  /* ---- active agent (for the trigger chip) ---- */
+  const activeAgent: AgentDef | undefined = agentId
+    ? AGENTS.find((a) => a.id === agentId)
+    : undefined;
+  const agentTriggerName = activeAgent ? activeAgent.name : "Agent";
+
+  const handleAgentSelect = (id: string, name: string) => {
+    setAgent(tabId, id);
+    setAgentOpen(false);
+    toast(`${name} selected`);
+  };
+
   return (
     <div className="relative w-full">
       {/* slash command popup (above the box) */}
@@ -534,6 +632,42 @@ export function Composer({ tabId }: { tabId: string }) {
           "focus-within:border-accent-fill/50"
         )}
       >
+        {/* skills chip row (above the textarea, only when skills exist) */}
+        {skills.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2 ws-fade-in">
+            {skills.map((skillId) => {
+              const cmd = SLASH_COMMANDS.find((c) => c.id === skillId);
+              const Icon = cmd ? skillIcon(cmd.icon) : Sparkles;
+              const label = cmd ? stripSlash(cmd.label) : skillId;
+              return (
+                <span
+                  key={skillId}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full",
+                    "border border-ws-border bg-hover pl-2 pr-1 py-0.5",
+                    "text-[12px] text-foreground"
+                  )}
+                >
+                  <Icon className="size-3 text-accent-hi" />
+                  {label}
+                  <button
+                    type="button"
+                    aria-label="Remove skill"
+                    onClick={() => removeSkill(tabId, skillId)}
+                    className={cn(
+                      "inline-flex items-center justify-center size-4 rounded-full",
+                      "text-ws-secondary hover:text-foreground hover:bg-card-ws",
+                      "transition-colors focus-ring"
+                    )}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         <Textarea
           ref={taRef}
           value={draft}
@@ -552,8 +686,8 @@ export function Composer({ tabId }: { tabId: string }) {
         />
 
         {/* bottom row */}
-        <div className="flex items-center mt-2.5 gap-2">
-          {/* left cluster: attach + Plan/Build selector */}
+        <div className="flex items-center justify-between mt-2.5 gap-2">
+          {/* left cluster: attach + Plan/Build selector + agent picker */}
           <div className="flex items-center gap-1.5">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -626,10 +760,122 @@ export function Composer({ tabId }: { tabId: string }) {
                 );
               })}
             </div>
+
+            {/* agent picker */}
+            <Popover open={agentOpen} onOpenChange={setAgentOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Pick agent"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 h-8 px-2.5",
+                    "rounded-[8px] border border-ws-border bg-card-ws",
+                    "text-[12px] text-foreground hover:bg-hover",
+                    "transition-colors focus-ring"
+                  )}
+                >
+                  {React.createElement(agentIcon(activeAgent?.icon), {
+                    className: "size-3.5 text-accent-hi",
+                  })}
+                  <span className="truncate max-w-[120px]">
+                    {agentTriggerName}
+                  </span>
+                  <ChevronDown className="size-3 text-ws-secondary shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                sideOffset={6}
+                className={cn(
+                  "w-[300px] p-1 rounded-[10px]",
+                  "bg-popover border border-ws-border"
+                )}
+              >
+                {/* None option (clears the agent) */}
+                <button
+                  type="button"
+                  onClick={() => handleAgentSelect("", "None")}
+                  className={cn(
+                    "w-full rounded-[8px] px-2.5 py-2 flex items-start gap-2",
+                    "text-left transition-colors cursor-pointer hover:bg-hover",
+                    agentId === "" && "bg-hover"
+                  )}
+                >
+                  <div className="size-7 rounded-[8px] bg-hover flex items-center justify-center shrink-0">
+                    <Bot className="size-4 text-accent-hi" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-medium text-foreground">
+                      None
+                    </div>
+                    <div className="text-[12px] text-ws-secondary line-clamp-1">
+                      No specific agent
+                    </div>
+                  </div>
+                  {agentId === "" && (
+                    <Check className="size-3.5 text-accent-hi ml-auto shrink-0" />
+                  )}
+                </button>
+
+                <div className="text-[11px] uppercase tracking-wide text-ws-secondary px-2.5 pt-2 pb-1">
+                  Detected agents
+                </div>
+
+                {AGENTS.map((a) => {
+                  const Icon = agentIcon(a.icon);
+                  const selected = a.id === agentId;
+                  return (
+                    <div
+                      key={a.id}
+                      title={
+                        a.detected ? undefined : "Not detected on this machine"
+                      }
+                      onClick={
+                        a.detected
+                          ? () => handleAgentSelect(a.id, a.name)
+                          : undefined
+                      }
+                      className={cn(
+                        "rounded-[8px] px-2.5 py-2 flex items-start gap-2",
+                        "transition-colors",
+                        a.detected
+                          ? "hover:bg-hover cursor-pointer"
+                          : "opacity-50",
+                        selected && "bg-hover"
+                      )}
+                    >
+                      <div className="size-7 rounded-[8px] bg-hover flex items-center justify-center shrink-0">
+                        <Icon className="size-4 text-accent-hi" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[13px] font-medium text-foreground">
+                            {a.name}
+                          </span>
+                          <span className="text-[11px] text-ws-disabled">
+                            {a.vendor}
+                          </span>
+                        </div>
+                        <div className="text-[12px] text-ws-secondary line-clamp-1">
+                          {a.description}
+                        </div>
+                      </div>
+                      {selected ? (
+                        <Check className="size-3.5 text-accent-hi ml-auto shrink-0" />
+                      ) : !a.detected ? (
+                        <span className="ml-auto text-[10px] text-ws-disabled border border-ws-border rounded-full px-1.5 py-0.5 shrink-0">
+                          Not detected
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* right cluster: model picker + send */}
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             <ModelPicker tabId={tabId} open={modelOpen} onOpenChange={setModelOpen} />
             <button
               type="button"

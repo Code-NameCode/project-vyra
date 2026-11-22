@@ -105,6 +105,17 @@ export interface Conversation {
   started: boolean;
   updatedAt: number;
   buildMode: BuildMode;
+  skills: string[];
+  agentId: string;
+}
+
+export interface AgentDef {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  detected: boolean;
+  vendor: string;
 }
 
 export interface Project {

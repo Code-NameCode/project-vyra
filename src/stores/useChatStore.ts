@@ -39,6 +39,8 @@ function emptyConversation(tabId: string, modelId: string): Conversation {
     started: false,
     updatedAt: Date.now(),
     buildMode: "build",
+    skills: [],
+    agentId: "",
   };
 }
 
@@ -53,6 +55,10 @@ interface ChatState {
   setComposerDraft: (tabId: string, text: string) => void;
   setModel: (tabId: string, modelId: string) => void;
   setBuildMode: (tabId: string, mode: BuildMode) => void;
+  addSkill: (tabId: string, skillId: string) => void;
+  removeSkill: (tabId: string, skillId: string) => void;
+  clearSkills: (tabId: string) => void;
+  setAgent: (tabId: string, agentId: string) => void;
   clearConversation: (tabId: string) => void;
   startFromTemplate: (prompt: string, title: string, templateId: string) => void;
   sendMessage: (tabId: string, text: string, modelId: string) => Promise<void>;
@@ -109,6 +115,58 @@ export const useChatStore = create<ChatState>()(
         conversations: {
           ...s.conversations,
           [tabId]: { ...conv, buildMode: mode },
+        },
+      };
+    }),
+
+  addSkill: (tabId, skillId) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      if (conv.skills.includes(skillId)) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: { ...conv, skills: [...conv.skills, skillId] },
+        },
+      };
+    }),
+
+  removeSkill: (tabId, skillId) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: {
+            ...conv,
+            skills: conv.skills.filter((sk) => sk !== skillId),
+          },
+        },
+      };
+    }),
+
+  clearSkills: (tabId) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: { ...conv, skills: [] },
+        },
+      };
+    }),
+
+  setAgent: (tabId, agentId) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: { ...conv, agentId },
         },
       };
     }),
@@ -251,6 +309,8 @@ export const useChatStore = create<ChatState>()(
           useRealApi: settings.useRealApi,
           agentInstructions: settings.agentInstructions,
           projectRules,
+          skills: conv?.skills ?? [],
+          agentId: conv?.agentId ?? "",
         }),
       });
 
@@ -439,6 +499,8 @@ export const useChatStore = create<ChatState>()(
             if (!c.title) c.title = "";
             if (!c.updatedAt) c.updatedAt = Date.now();
             if (!c.buildMode) c.buildMode = "build";
+            if (!Array.isArray(c.skills)) c.skills = [];
+            if (typeof c.agentId !== "string") c.agentId = "";
             c.steps = c.steps.map((st) =>
               st.status === "running" ? { ...st, status: "done" } : st
             );

@@ -45,7 +45,7 @@ export function IconRail() {
       <nav
         aria-label="Primary navigation"
         className={cn(
-          "flex h-full w-[66px] max-[639px]:w-[52px] shrink-0 flex-col items-center gap-2",
+          "hidden min-[640px]:flex h-full w-[66px] shrink-0 flex-col items-center gap-2",
           "border-r border-ws-border bg-surface py-3"
         )}
       >

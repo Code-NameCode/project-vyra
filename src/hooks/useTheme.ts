@@ -19,6 +19,8 @@ import { getPresetTheme } from "@/data/themes";
 export function useTheme(): void {
   const themeId = useSettingsStore((s) => s.themeId);
   const customVars = useSettingsStore((s) => s.customVars);
+  const fontFamily = useSettingsStore((s) => s.fontFamily);
+  const fontSize = useSettingsStore((s) => s.fontSize);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -67,4 +69,18 @@ export function useTheme(): void {
       }
     }
   }, [themeId, customVars]);
+
+  // apply font family + size (on <body> where the next/font CSS variables live)
+  useEffect(() => {
+    const body = document.body;
+    const fontMap: Record<string, string> = {
+      Inter: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
+      Geist: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
+      Monospace: "var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace",
+      Serif: "ui-serif, Georgia, Cambria, serif",
+      System: "ui-sans-serif, system-ui, -apple-system, sans-serif",
+    };
+    body.style.fontFamily = fontMap[fontFamily] || fontMap.Inter;
+    body.style.fontSize = `${fontSize}px`;
+  }, [fontFamily, fontSize]);
 }

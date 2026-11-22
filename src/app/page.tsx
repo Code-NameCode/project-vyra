@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Menu } from "lucide-react";
 import { TopBar } from "@/components/workspace/TopBar";
 import { IconRail } from "@/components/workspace/IconRail";
+import { MobileNav } from "@/components/workspace/MobileNav";
 import { Sidebar } from "@/components/workspace/Sidebar";
 import { HeroScreen } from "@/components/workspace/HeroScreen";
 import { ChatView } from "@/components/workspace/ChatView";
@@ -144,8 +145,9 @@ export default function Home() {
 
       <main
         className={cn(
-          "mx-2.5 mb-2.5 flex flex-1 overflow-hidden rounded-[14px]",
-          "border-x border-b border-ws-border-soft bg-surface"
+          "mx-2.5 min-[640px]:mb-2.5 flex flex-1 overflow-hidden rounded-[14px]",
+          "border-x border-ws-border-soft bg-surface",
+          "min-[640px]:border-b"
         )}
       >
         {/* Icon rail (always visible) */}
@@ -238,6 +240,9 @@ export default function Home() {
           </section>
         )}
       </main>
+
+      {/* mobile bottom navigation (replaces IconRail on phones) */}
+      <MobileNav />
 
       {/* overlays / modals */}
       <CommandPalette />

@@ -10,6 +10,8 @@ interface SettingsState {
   defaultModelId: string;
   themeId: string;
   customVars: Record<string, string>;
+  fontFamily: string;
+  fontSize: string;
   agentInstructions: string;
   skills: string[];
   skillsFolderPath: string;
@@ -22,6 +24,8 @@ interface SettingsState {
   setCustomVar: (name: string, value: string) => void;
   clearCustomVars: () => void;
   resetTheme: () => void;
+  setFontFamily: (v: string) => void;
+  setFontSize: (v: string) => void;
   setAgentInstructions: (v: string) => void;
   setUseRealApi: (v: boolean) => void;
   setSkillsFolderPath: (v: string) => void;
@@ -52,6 +56,8 @@ export const useSettingsStore = create<SettingsState>()(
       defaultModelId: "",
       themeId: "forge-dark",
       customVars: {},
+      fontFamily: "Inter",
+      fontSize: "14",
       agentInstructions: DEFAULT_INSTRUCTIONS,
       skills: [
         "Web search",
@@ -82,7 +88,11 @@ export const useSettingsStore = create<SettingsState>()(
         set({
           themeId: getPresetTheme("forge-dark").id,
           customVars: {},
+          fontFamily: "Inter",
+          fontSize: "14",
         }),
+      setFontFamily: (v) => set({ fontFamily: v }),
+      setFontSize: (v) => set({ fontSize: v }),
       setAgentInstructions: (v) => set({ agentInstructions: v }),
       setUseRealApi: (v) => set({ useRealApi: v }),
       setSkillsFolderPath: (v) => set({ skillsFolderPath: v }),

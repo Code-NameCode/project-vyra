@@ -414,6 +414,10 @@ function AppearanceTabContent() {
   const customVars = useSettingsStore((s) => s.customVars);
   const setCustomVar = useSettingsStore((s) => s.setCustomVar);
   const resetTheme = useSettingsStore((s) => s.resetTheme);
+  const fontFamily = useSettingsStore((s) => s.fontFamily);
+  const fontSize = useSettingsStore((s) => s.fontSize);
+  const setFontFamily = useSettingsStore((s) => s.setFontFamily);
+  const setFontSize = useSettingsStore((s) => s.setFontSize);
 
   const hasCustom = Object.keys(customVars).length > 0;
   const activePreset = getPresetTheme(themeId);
@@ -527,6 +531,41 @@ function AppearanceTabContent() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Fonts */}
+      <div className="grid gap-3 rounded-[10px] border border-ws-border bg-card-ws px-3 py-3">
+        <span className="text-[12.5px] font-medium text-foreground">Fonts</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="grid gap-1 flex-1 min-w-[140px]">
+            <label className="text-[11px] text-ws-secondary">Font family</label>
+            <Select value={fontFamily} onValueChange={setFontFamily}>
+              <SelectTrigger className="focus-ring bg-card-ws border-ws-border text-[13px] h-8 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-ws-border">
+                <SelectItem value="Inter">Inter / Geist (sans)</SelectItem>
+                <SelectItem value="Monospace">Monospace</SelectItem>
+                <SelectItem value="Serif">Serif</SelectItem>
+                <SelectItem value="System">System UI</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1 min-w-[100px]">
+            <label className="text-[11px] text-ws-secondary">Font size</label>
+            <Select value={fontSize} onValueChange={setFontSize}>
+              <SelectTrigger className="focus-ring bg-card-ws border-ws-border text-[13px] h-8 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-ws-border">
+                <SelectItem value="13">Small (13px)</SelectItem>
+                <SelectItem value="14">Medium (14px)</SelectItem>
+                <SelectItem value="15">Large (15px)</SelectItem>
+                <SelectItem value="16">Extra large (16px)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

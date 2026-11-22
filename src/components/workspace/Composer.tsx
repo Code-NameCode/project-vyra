@@ -638,8 +638,8 @@ export function Composer({ tabId }: { tabId: string }) {
           "focus-within:border-accent-fill/50"
         )}
       >
-        {/* project selector bar (top of composer) */}
-        <div className="flex items-center gap-1.5 mb-2 ws-fade-in">
+        {/* project selector bar (top of composer) — hidden on mobile */}
+        <div className="hidden min-[640px]:flex items-center gap-1.5 mb-2 ws-fade-in">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button

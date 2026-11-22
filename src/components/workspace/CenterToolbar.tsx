@@ -70,26 +70,28 @@ export function CenterToolbar() {
 
   return (
     <div className="flex items-center gap-1">
-      <ToolButton
-        label="Overview"
-        icon={List}
-        onClick={() => openRightTab("overview")}
-        active={rightPanelOpen && activeView === "overview"}
-        disabled={!started}
-        disabledTooltip="Start a project first"
-      />
-      <ToolButton
-        label="Terminal"
-        icon={TerminalSquare}
-        onClick={() => openRightTab("terminal")}
-        active={rightPanelOpen && activeView === "terminal"}
-      />
-      <ToolButton
-        label="Files"
-        icon={Folder}
-        onClick={() => openRightTab("files")}
-        active={rightPanelOpen && activeView === "files"}
-      />
+      <div className="hidden min-[640px]:flex items-center gap-1">
+        <ToolButton
+          label="Overview"
+          icon={List}
+          onClick={() => openRightTab("overview")}
+          active={rightPanelOpen && activeView === "overview"}
+          disabled={!started}
+          disabledTooltip="Start a project first"
+        />
+        <ToolButton
+          label="Terminal"
+          icon={TerminalSquare}
+          onClick={() => openRightTab("terminal")}
+          active={rightPanelOpen && activeView === "terminal"}
+        />
+        <ToolButton
+          label="Files"
+          icon={Folder}
+          onClick={() => openRightTab("files")}
+          active={rightPanelOpen && activeView === "files"}
+        />
+      </div>
       <ToolButton
         label={rightPanelOpen ? "Close panel" : "Open panel"}
         icon={PanelRight}

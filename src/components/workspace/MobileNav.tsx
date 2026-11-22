@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderKanban, Home, Layers, LayoutGrid, Settings } from "lucide-react";
+import { FolderKanban, Home, Layers, LayoutGrid, Settings, Workflow } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAppStore } from "@/stores/useAppStore";
 import type { RailPage } from "@/lib/types";
@@ -22,6 +22,7 @@ export function MobileNav() {
     { label: "Home", icon: Home, page: "home" },
     { label: "Sessions", icon: Layers, page: "sessions" },
     { label: "Projects", icon: FolderKanban, page: "projects" },
+    { label: "Tasks", icon: Workflow, page: "tasks" },
     { label: "Templates", icon: LayoutGrid, page: "templates" },
     {
       label: "Settings",

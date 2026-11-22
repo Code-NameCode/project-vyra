@@ -14,6 +14,7 @@ import { SessionsPage } from "@/components/workspace/SessionsPage";
 import { TemplatesPage } from "@/components/workspace/TemplatesPage";
 import { ExtensionsPage } from "@/components/workspace/ExtensionsPage";
 import { ProjectsPage } from "@/components/workspace/ProjectsPage";
+import { TasksPage } from "@/components/workspace/TasksPage";
 import { CommandPalette } from "@/components/workspace/CommandPalette";
 import { SettingsModal } from "@/components/workspace/modals/SettingsModal";
 import {
@@ -237,6 +238,7 @@ export default function Home() {
             {railPage === "templates" && <TemplatesPage />}
             {railPage === "extensions" && <ExtensionsPage />}
             {railPage === "projects" && <ProjectsPage />}
+            {railPage === "tasks" && <TasksPage />}
           </section>
         )}
       </main>

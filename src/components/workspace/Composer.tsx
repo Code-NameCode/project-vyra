@@ -29,6 +29,7 @@ import {
   Shuffle,
   Sparkles,
   Square,
+  Telescope,
   TerminalSquare,
   Wrench,
   X,
@@ -184,6 +185,12 @@ export function Composer({ tabId }: { tabId: string }) {
     (s) => s.conversations[tabId]?.agentId ?? ""
   );
   const setAgent = useChatStore((s) => s.setAgent);
+
+  /* ---- Deep research mode ---- */
+  const researchMode = useChatStore(
+    (s) => s.conversations[tabId]?.researchMode ?? false
+  );
+  const setResearchMode = useChatStore((s) => s.setResearchMode);
 
   /* ---- Plan / Build mode (defensive: works with or without store support) ---- */
   const storeBuildMode = useChatStore(
@@ -763,6 +770,22 @@ export function Composer({ tabId }: { tabId: string }) {
           </div>
         )}
 
+        {/* deep research indicator (below skills chips, above the textarea) */}
+        {researchMode && !streaming && (
+          <div
+            className={cn(
+              "flex items-center gap-1.5 rounded-[6px]",
+              "bg-accent-fill/10 border border-accent-fill/20 px-2 py-1",
+              "text-[12px] text-accent-hi mb-2 ws-fade-in"
+            )}
+          >
+            <Telescope className="size-3.5 shrink-0" />
+            <span className="truncate">
+              Deep research mode — the agent will search, read, analyze, and write a full report.
+            </span>
+          </div>
+        )}
+
         <Textarea
           ref={taRef}
           value={draft}
@@ -859,6 +882,31 @@ export function Composer({ tabId }: { tabId: string }) {
                 );
               })}
             </div>
+
+            {/* Deep research toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !researchMode;
+                setResearchMode(tabId, next);
+                toast(
+                  next ? "Deep research enabled" : "Deep research disabled"
+                );
+              }}
+              aria-pressed={researchMode}
+              aria-label="Deep research"
+              title="Deep research"
+              className={cn(
+                "inline-flex items-center gap-1.5 h-8 px-2.5",
+                "rounded-[8px] border text-[12px] transition-colors duration-150 focus-ring",
+                researchMode
+                  ? "border-accent-fill/40 bg-accent-fill/10 text-accent-hi"
+                  : "border-ws-border bg-card-ws text-ws-secondary hover:text-foreground"
+              )}
+            >
+              <Telescope className="size-3.5 shrink-0" />
+              <span className="hidden min-[640px]:inline">Research</span>
+            </button>
 
             {/* agent picker */}
             <Popover open={agentOpen} onOpenChange={setAgentOpen}>

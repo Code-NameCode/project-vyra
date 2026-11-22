@@ -8,6 +8,7 @@ export type RailPage =
   | "templates"
   | "extensions"
   | "projects"
+  | "tasks"
   | "settings";
 
 export type TabType = "chat" | "project";
@@ -107,6 +108,7 @@ export interface Conversation {
   buildMode: BuildMode;
   skills: string[];
   agentId: string;
+  researchMode: boolean;
 }
 
 export interface AgentDef {

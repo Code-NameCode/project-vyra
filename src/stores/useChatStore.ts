@@ -42,6 +42,7 @@ function emptyConversation(tabId: string, modelId: string): Conversation {
     buildMode: "build",
     skills: [],
     agentId: "",
+    researchMode: false,
   };
 }
 
@@ -60,6 +61,7 @@ interface ChatState {
   removeSkill: (tabId: string, skillId: string) => void;
   clearSkills: (tabId: string) => void;
   setAgent: (tabId: string, agentId: string) => void;
+  setResearchMode: (tabId: string, mode: boolean) => void;
   clearConversation: (tabId: string) => void;
   startFromTemplate: (prompt: string, title: string, templateId: string) => void;
   sendMessage: (tabId: string, text: string, modelId: string) => Promise<void>;
@@ -168,6 +170,18 @@ export const useChatStore = create<ChatState>()(
         conversations: {
           ...s.conversations,
           [tabId]: { ...conv, agentId },
+        },
+      };
+    }),
+
+  setResearchMode: (tabId, mode) =>
+    set((s) => {
+      const conv = s.conversations[tabId];
+      if (!conv) return {};
+      return {
+        conversations: {
+          ...s.conversations,
+          [tabId]: { ...conv, researchMode: mode },
         },
       };
     }),
@@ -318,26 +332,33 @@ export const useChatStore = create<ChatState>()(
       }
     }
 
+    const isResearch = !!conv?.researchMode;
+
     try {
-      const res = await fetch("/api/chat", {
+      const url = isResearch ? "/api/research" : "/api/chat";
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({
-          mode: useAppStore.getState().mode,
-          buildMode,
-          model: reqModel,
-          providerType,
-          providerId: parsed?.providerId,
-          messages: [...history, { role: "user", content: trimmed }],
-          apiKey: reqApiKey,
-          baseUrl: reqBaseUrl,
-          useRealApi: reqUseRealApi,
-          agentInstructions: settings.agentInstructions,
-          projectRules,
-          skills: conv?.skills ?? [],
-          agentId: conv?.agentId ?? "",
-        }),
+        body: JSON.stringify(
+          isResearch
+            ? { query: trimmed, messages: [...history, { role: "user", content: trimmed }] }
+            : {
+                mode: useAppStore.getState().mode,
+                buildMode,
+                model: reqModel,
+                providerType,
+                providerId: parsed?.providerId,
+                messages: [...history, { role: "user", content: trimmed }],
+                apiKey: reqApiKey,
+                baseUrl: reqBaseUrl,
+                useRealApi: reqUseRealApi,
+                agentInstructions: settings.agentInstructions,
+                projectRules,
+                skills: conv?.skills ?? [],
+                agentId: conv?.agentId ?? "",
+            }
+        ),
       });
 
       await readSSE(res, (evt: StreamEvent) => {
@@ -526,6 +547,7 @@ export const useChatStore = create<ChatState>()(
           if (!c.buildMode) c.buildMode = "build";
           if (!Array.isArray(c.skills)) c.skills = [];
           if (typeof c.agentId !== "string") c.agentId = "";
+          if (typeof c.researchMode !== "boolean") c.researchMode = false;
           c.steps = c.steps.map((st) =>
             st.status === "running" ? { ...st, status: "done" } : st
           );

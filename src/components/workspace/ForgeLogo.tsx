@@ -3,8 +3,8 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Original Forge wordmark. A rounded-square spark mark + bold "Forge" wordmark.
- * Not derived from any real product logo.
+ * Goodstuff-Agent wordmark. A rounded-square spark mark + bold wordmark.
+ * Original asset, not derived from any real product logo.
  */
 export function ForgeMark({
   size = 22,
@@ -47,10 +47,10 @@ export function ForgeLogo({
       <ForgeMark size={size} />
       {!collapsed && (
         <span
-          className="text-[17px] font-semibold tracking-tight text-[#f2f2f2]"
+          className="whitespace-nowrap text-[15px] font-semibold tracking-tight text-[#f2f2f2]"
           style={{ letterSpacing: "-0.01em" }}
         >
-          Forge
+          Goodstuff-Agent
         </span>
       )}
     </div>

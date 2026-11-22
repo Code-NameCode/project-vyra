@@ -540,7 +540,7 @@ export function Composer({ tabId }: { tabId: string }) {
           onChange={(e) => setComposerDraft(tabId, e.target.value)}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="Ask Forge... Use / for commands"
+          placeholder="Ask Goodstuff-Agent... Use / for commands"
           className={cn(
             "bg-transparent border-0 resize-none p-0 m-0",
             "text-[15px] leading-[1.55] text-foreground",

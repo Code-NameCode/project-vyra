@@ -13,17 +13,8 @@ import type {
   Workspace,
 } from "@/lib/types";
 import { useAppStore } from "./useAppStore";
-import { useAccountStore } from "./useAccountStore";
 import { useSettingsStore } from "./useSettingsStore";
 import { useProjectsStore } from "./useProjectsStore";
-import modelsData from "@/data/models.json";
-import type { ModelDef } from "@/lib/types";
-
-const MODELS = modelsData as ModelDef[];
-
-function modelMultiplier(id: string): number {
-  return MODELS.find((m) => m.id === id)?.multiplier ?? 1;
-}
 
 function emptyWorkspace(): Workspace {
   return {
@@ -51,9 +42,8 @@ function emptyConversation(tabId: string, modelId: string): Conversation {
   };
 }
 
-// module-scoped abort controllers + tick timer (kept out of React state)
+// module-scoped abort controllers (kept out of React state)
 const controllers = new Map<string, AbortController>();
-let tickTimer: ReturnType<typeof setInterval> | null = null;
 
 interface ChatState {
   conversations: Record<string, Conversation>;
@@ -161,15 +151,6 @@ export const useChatStore = create<ChatState>()(
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    const account = useAccountStore.getState();
-    account.resetDailyIfStale();
-
-    const mult = modelMultiplier(modelId);
-    if (!account.canRun(mult)) {
-      useAppStore.getState().setHoursExhaustedOpen(true);
-      return;
-    }
-
     // ensure conversation + push user message
     get().ensure(tabId, modelId);
     const userMsg: ChatMessage = {
@@ -215,22 +196,6 @@ export const useChatStore = create<ChatState>()(
     if (tab && (tab.title === "New chat" || !tab.title)) {
       app.renameTab(tabId, trimmed.slice(0, 40));
     }
-
-    // start hours ticker
-    account.startRunning(mult);
-    if (tickTimer) clearInterval(tickTimer);
-    const startedAt = Date.now();
-    tickTimer = setInterval(() => {
-      useAccountStore.getState().tick(1000);
-      const a = useAccountStore.getState();
-      if (
-        a.dailyHoursMs <= 0 &&
-        a.referralWalletMs <= 0 &&
-        a.running
-      ) {
-        useAppStore.getState().setHoursExhaustedOpen(true);
-      }
-    }, 1000);
 
     // build request payload from current history
     const conv = get().conversations[tabId];
@@ -430,14 +395,6 @@ export const useChatStore = create<ChatState>()(
       }));
     } finally {
       controllers.delete(tabId);
-      account.stopRunning();
-      if (tickTimer) {
-        clearInterval(tickTimer);
-        tickTimer = null;
-      }
-      // record spent time from real elapsed
-      const elapsed = Date.now() - startedAt;
-      void account.spendForTurn(mult, elapsed);
     }
   },
 

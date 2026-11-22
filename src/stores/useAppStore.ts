@@ -43,8 +43,6 @@ interface AppState {
   setSearchOpen: (v: boolean) => void;
   settingsOpen: boolean;
   setSettingsOpen: (v: boolean) => void;
-  hoursExhaustedOpen: boolean;
-  setHoursExhaustedOpen: (v: boolean) => void;
 
   // mobile
   mobileSidebarOpen: boolean;
@@ -163,8 +161,6 @@ export const useAppStore = create<AppState>()(
       setSearchOpen: (v) => set({ searchOpen: v }),
       settingsOpen: false,
       setSettingsOpen: (v) => set({ settingsOpen: v }),
-      hoursExhaustedOpen: false,
-      setHoursExhaustedOpen: (v) => set({ hoursExhaustedOpen: v }),
 
       mobileSidebarOpen: false,
       setMobileSidebarOpen: (v) => set({ mobileSidebarOpen: v }),

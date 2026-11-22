@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Forge — AI Coding Agent Workspace",
+  title: "Goodstuff-Agent — AI Coding Agent Workspace",
   description:
-    "Forge is an AI coding-agent workspace. Build apps, run agents, edit code and ship — all in one place.",
+    "Goodstuff-Agent is an AI coding-agent workspace. Build apps, run agents, edit code and ship — all in one place.",
   icons: {
     icon: "/logo.svg",
   },

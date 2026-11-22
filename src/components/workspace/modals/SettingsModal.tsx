@@ -144,7 +144,7 @@ export function SettingsModal() {
                       Use real OpenAI-compatible API
                     </span>
                     <span className="text-[12px] text-ws-disabled">
-                      When off, Forge uses mock streaming responses.
+                      When off, Goodstuff-Agent uses mock streaming responses.
                     </span>
                   </div>
                   <Switch
@@ -170,7 +170,7 @@ export function SettingsModal() {
                     </SelectContent>
                   </Select>
                 </FieldRow>
-                <FieldRow label="Theme" htmlFor="settings-theme" hint="Forge is always dark visually.">
+                <FieldRow label="Theme" htmlFor="settings-theme" hint="Goodstuff-Agent is always dark visually.">
                   <Select value={theme} onValueChange={(v) => setTheme(v as "dark" | "light")}>
                     <SelectTrigger
                       id="settings-theme"

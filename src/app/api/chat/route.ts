@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
         const tokens = finalAnswer.match(/\S+\s*|\s+/g) ?? [finalAnswer];
         for (const tk of tokens) {
           send({ type: "token", text: tk });
-          await sleep(18 + Math.random() * 45, signal);
+          await sleep(10 + Math.random() * 26, signal);
         }
 
         send({ type: "done" });
@@ -370,7 +370,7 @@ export default function App() {
   return (
     <main className="app-shell">
       <h1>${title}</h1>
-      <p>Built with Forge.</p>
+      <p>Built with Goodstuff-Agent.</p>
     </main>
   );
 }

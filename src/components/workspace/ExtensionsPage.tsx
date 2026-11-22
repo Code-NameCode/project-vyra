@@ -75,7 +75,7 @@ const EXTENSIONS: Extension[] = [
     id: "deployment",
     name: "Deployment",
     description:
-      "Ship your project to Forge hosting, Vercel, or Netlify with a single command from the agent.",
+      "Ship your project to Goodstuff-Agent hosting, Vercel, or Netlify with a single command from the agent.",
     icon: Rocket,
     category: "Deploy",
   },

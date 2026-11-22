@@ -15,10 +15,16 @@ export function emptyWorkspace(): Workspace {
   };
 }
 
+/** Deep-clone a workspace (all fields are plain serializable data). */
+function cloneWorkspace(ws: Workspace): Workspace {
+  return JSON.parse(JSON.stringify(ws)) as Workspace;
+}
+
 interface ProjectsState {
   projects: Project[];
   legacy: LegacyChat[];
   addProject: (name: string, templateId?: string) => string;
+  cloneProject: (id: string) => string;
   updateWorkspace: (projectId: string, updater: (ws: Workspace) => Workspace) => void;
   removeProject: (id: string) => void;
   renameProject: (id: string, name: string) => void;
@@ -28,7 +34,7 @@ interface ProjectsState {
 
 export const useProjectsStore = create<ProjectsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       projects: [],
       legacy: [
         {
@@ -58,6 +64,24 @@ export const useProjectsStore = create<ProjectsState>()(
           ],
         }));
         return id;
+      },
+      cloneProject: (id) => {
+        const src = get().projects.find((p) => p.id === id);
+        const newId = uid("proj");
+        set((s) => ({
+          projects: [
+            ...s.projects,
+            {
+              id: newId,
+              name: src ? `${src.name} copy` : "Untitled project",
+              templateId: src?.templateId,
+              createdAt: Date.now(),
+              workspace: src ? cloneWorkspace(src.workspace) : emptyWorkspace(),
+              rules: src?.rules ?? "",
+            },
+          ],
+        }));
+        return newId;
       },
       updateWorkspace: (projectId, updater) =>
         set((s) => ({

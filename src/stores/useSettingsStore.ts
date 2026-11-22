@@ -24,7 +24,7 @@ interface SettingsState {
 
 const DEFAULT_INSTRUCTIONS = `# AGENTS.md
 
-You are Forge, an autonomous coding agent inside a web workspace.
+You are Goodstuff-Agent, an autonomous coding agent inside a web workspace.
 
 ## Guidelines
 - Think step by step before writing code.

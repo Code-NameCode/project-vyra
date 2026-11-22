@@ -15,7 +15,6 @@ import { ExtensionsPage } from "@/components/workspace/ExtensionsPage";
 import { ProjectsPage } from "@/components/workspace/ProjectsPage";
 import { CommandPalette } from "@/components/workspace/CommandPalette";
 import { SettingsModal } from "@/components/workspace/modals/SettingsModal";
-import { HoursExhaustedModal } from "@/components/workspace/modals/HoursExhaustedModal";
 import {
   Sheet,
   SheetContent,
@@ -24,7 +23,6 @@ import {
 } from "@/components/ui/sheet";
 import { useAppStore } from "@/stores/useAppStore";
 import { useChatStore } from "@/stores/useChatStore";
-import { useAccountStore } from "@/stores/useAccountStore";
 import { cn } from "@/lib/utils";
 
 function useMediaQuery(query: string): boolean {
@@ -94,11 +92,6 @@ export default function Home() {
   const ensure = useChatStore((s) => s.ensure);
 
   const isDesktop = useMediaQuery("(min-width: 1100px)");
-
-  // reset daily allowance on mount if a new day
-  useEffect(() => {
-    useAccountStore.getState().resetDailyIfStale();
-  }, []);
 
   // make sure a conversation object exists for the active tab
   useEffect(() => {
@@ -239,7 +232,6 @@ export default function Home() {
       {/* overlays / modals */}
       <CommandPalette />
       <SettingsModal />
-      <HoursExhaustedModal />
     </div>
   );
 }

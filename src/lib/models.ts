@@ -1,14 +1,8 @@
-import modelsData from "@/data/models.json";
-import type { ModelDef, Provider } from "@/lib/types";
-
-const SIMULATED = modelsData as ModelDef[];
+import type { Provider } from "@/lib/types";
 
 export interface PickModel {
-  id: string; // unified id (simulated id or `${providerId}:${modelName}`)
+  id: string; // unified id `${providerId}:${modelName}`
   name: string;
-  description?: string;
-  contextWindow?: string;
-  multiplier?: number;
   providerName?: string;
   providerType?: string;
 }
@@ -18,20 +12,13 @@ export interface ModelGroup {
   models: PickModel[];
 }
 
-/** All selectable models grouped: Simulated first, then each enabled provider. */
+/**
+ * All selectable models grouped by enabled provider. Models marked `hidden`
+ * are filtered out (the user curates which to show via the Models tab). There
+ * are no built-in/simulated models — only real provider models.
+ */
 export function listAllModelGroups(providers: Provider[]): ModelGroup[] {
-  const groups: ModelGroup[] = [
-    {
-      label: "Simulated",
-      models: SIMULATED.map((m) => ({
-        id: m.id,
-        name: m.name,
-        description: m.description,
-        contextWindow: m.contextWindow,
-        multiplier: m.multiplier,
-      })),
-    },
-  ];
+  const groups: ModelGroup[] = [];
   for (const p of providers) {
     if (!p.enabled) continue;
     const visible = p.models.filter((m) => !m.hidden);
@@ -49,10 +36,18 @@ export function listAllModelGroups(providers: Provider[]): ModelGroup[] {
   return groups;
 }
 
-/** Resolve a unified model id to a human-readable name. */
-export function resolveModelName(id: string, providers: Provider[]): string {
-  const sim = SIMULATED.find((m) => m.id === id);
-  if (sim) return sim.name;
+/** Whether a model id belongs to a provider (i.e. is a real, selectable model). */
+export function isProviderModel(
+  id: string,
+  providers: Provider[]
+): boolean {
+  if (!id) return false;
+  return providers.some((p) => p.models.some((m) => m.id === id && !m.hidden));
+}
+
+/** Resolve a unified model id to a human-readable name (the model part). */
+export function resolveModelName(id: string, _providers?: Provider[]): string {
+  if (!id) return "";
   const i = id.indexOf(":");
   if (i > 0) {
     return id.slice(i + 1);

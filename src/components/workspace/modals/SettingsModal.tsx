@@ -37,10 +37,8 @@ import { toast } from "sonner";
 import { useAppStore } from "@/stores/useAppStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useProvidersStore } from "@/stores/useProvidersStore";
-import modelsData from "@/data/models.json";
-import type { ModelDef, Provider, ProviderType } from "@/lib/types";
-
-const MODELS = modelsData as ModelDef[];
+import { cn } from "@/lib/utils";
+import type { Provider, ProviderType } from "@/lib/types";
 
 function FieldRow({
   label,
@@ -76,6 +74,11 @@ const PROVIDER_TYPE_LABEL: Record<ProviderType, string> = {
   custom: "Custom",
 };
 
+/** A provider is connected when enabled and either ollama (no key needed) or has an API key. */
+function isConnected(p: Provider): boolean {
+  return p.enabled && (p.type === "ollama" || !!p.apiKey);
+}
+
 function ProviderCard({
   provider,
   onRemove,
@@ -84,21 +87,27 @@ function ProviderCard({
   onRemove: (p: Provider) => void;
 }) {
   const updateProvider = useProvidersStore((s) => s.updateProvider);
-  const toggleModelHidden = useProvidersStore((s) => s.toggleModelHidden);
-  const detectOllama = useProvidersStore((s) => s.detectOllama);
-  const detecting = useProvidersStore((s) => s.detecting);
+  const detectProviderModels = useProvidersStore((s) => s.detectProviderModels);
   const isOllama = provider.type === "ollama";
+  const connected = isConnected(provider);
+  const [fetching, setFetching] = React.useState(false);
 
-  const onDetect = async () => {
+  const onFetch = async () => {
+    if (!connected) return;
+    setFetching(true);
     try {
-      const models = await detectOllama(provider.baseUrl);
-      if (models.length === 0) {
-        toast.error("Ollama not reachable");
+      const models = await detectProviderModels(provider.id);
+      if (models.length > 0) {
+        toast.success(
+          `${models.length} model(s) fetched from ${provider.name}`
+        );
       } else {
-        toast.success(`${models.length} Ollama model(s) detected`);
+        toast.error("No models found — check the connection");
       }
     } catch {
-      toast.error("Ollama not reachable");
+      toast.error("No models found — check the connection");
+    } finally {
+      setFetching(false);
     }
   };
 
@@ -148,8 +157,8 @@ function ProviderCard({
 
         {isOllama ? (
           <p className="text-[12px] text-ws-secondary px-1 py-1">
-            Ollama runs locally and needs no API key. Use the detect button
-            below to fetch available models.
+            Ollama runs locally and needs no API key. Use Fetch models to load
+            available models.
           </p>
         ) : (
           <FieldRow label="API key" htmlFor={`prov-key-${provider.id}`}>
@@ -167,82 +176,155 @@ function ProviderCard({
         )}
       </div>
 
-      <div className="mt-2 flex flex-col gap-0.5">
-        <div className="flex items-center justify-between px-2">
-          <span className="text-[11px] uppercase tracking-wide text-ws-secondary">
-            Models
-          </span>
-          <span className="text-[11px] text-ws-secondary">
-            {provider.models.length}
-          </span>
-        </div>
+      <div className="mt-2 flex items-center justify-between px-2">
+        <span className="text-[12px] text-ws-secondary">
+          {provider.models.length} model(s)
+        </span>
+        <button
+          type="button"
+          onClick={onFetch}
+          disabled={!connected || fetching}
+          className={cn(
+            "inline-flex items-center gap-2 h-7 px-2.5 rounded-[8px] bg-accent-fill text-white text-[12px] hover:opacity-90 focus-ring",
+            (!connected || fetching) && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {fetching ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3.5" />
+          )}
+          {fetching ? "Fetching…" : "Fetch models"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
-        {provider.models.length === 0 ? (
-          <div className="flex items-center justify-between px-2">
-            <span className="text-[12px] text-ws-disabled py-1">No models</span>
-            {isOllama ? (
-              <button
-                type="button"
-                onClick={onDetect}
-                disabled={detecting}
-                className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 focus-ring disabled:opacity-60"
-              >
-                {detecting ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-3.5" />
-                )}
-                {detecting ? "Detecting..." : "Detect models"}
-              </button>
-            ) : null}
-          </div>
+function ModelsTabContent() {
+  const providers = useProvidersStore((s) => s.providers);
+  const detectProviderModels = useProvidersStore((s) => s.detectProviderModels);
+  const toggleModelHidden = useProvidersStore((s) => s.toggleModelHidden);
+  const [fetchingId, setFetchingId] = React.useState<string | null>(null);
+
+  const onFetch = async (p: Provider) => {
+    if (!isConnected(p)) return;
+    setFetchingId(p.id);
+    try {
+      const models = await detectProviderModels(p.id);
+      if (models.length > 0) {
+        toast.success(`${models.length} model(s) fetched from ${p.name}`);
+      } else {
+        toast.error("No models found — check the connection");
+      }
+    } catch {
+      toast.error("No models found — check the connection");
+    } finally {
+      setFetchingId(null);
+    }
+  };
+
+  return (
+    <div className="grid gap-2">
+      <div className="grid gap-0.5">
+        <span className="text-[14px] font-medium text-foreground">Models</span>
+        <span className="text-[12px] text-ws-secondary">
+          Fetch models from connected providers and choose which to show in the
+          composer.
+        </span>
+      </div>
+
+      <div className="ws-scroll max-h-[400px] overflow-y-auto flex flex-col gap-2 mt-3">
+        {providers.length === 0 ? (
+          <p className="text-[12.5px] text-ws-disabled">
+            No providers configured.
+          </p>
         ) : (
-          <>
-            {provider.models.map((m) => (
+          providers.map((p) => {
+            const connected = isConnected(p);
+            const fetching = fetchingId === p.id;
+            return (
               <div
-                key={m.id}
-                className="flex items-center gap-2 rounded-[6px] px-2 py-1 hover:bg-hover"
+                key={p.id}
+                className="rounded-[10px] border border-ws-border bg-card-ws p-3"
               >
-                <span className="text-[12.5px] text-foreground font-mono truncate">
-                  {m.name}
-                </span>
-                {m.hidden ? (
-                  <span className="text-[10px] text-ws-disabled border border-ws-border rounded-full px-1.5 py-0.5">
-                    hidden
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-medium text-foreground truncate">
+                    {p.name}
                   </span>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => toggleModelHidden(provider.id, m.id)}
-                  aria-label={m.hidden ? "Show model" : "Hide model"}
-                  className="ml-auto inline-flex items-center justify-center size-6 rounded-[6px] text-ws-secondary hover:bg-card-ws hover:text-foreground focus-ring"
-                >
-                  {m.hidden ? (
-                    <EyeOff className="size-3.5" />
+                  <span className="text-[10px] rounded-full px-1.5 py-0.5 border text-ws-secondary border-ws-border">
+                    {PROVIDER_TYPE_LABEL[p.type]}
+                  </span>
+                  <span
+                    className={cn(
+                      "ml-auto text-[10px] rounded-full px-1.5 py-0.5 border",
+                      connected
+                        ? "text-accent-hi border-accent-fill/30 bg-accent-fill/10"
+                        : "text-ws-disabled border-ws-border"
+                    )}
+                  >
+                    {connected ? "connected" : "not connected"}
+                  </span>
+                </div>
+
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => onFetch(p)}
+                    disabled={!connected || fetching}
+                    className={cn(
+                      "inline-flex items-center gap-2 h-7 px-2.5 rounded-[8px] bg-accent-fill text-white text-[12px] hover:opacity-90 focus-ring",
+                      (!connected || fetching) &&
+                        "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {fetching ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-3.5" />
+                    )}
+                    {fetching ? "Fetching…" : "Fetch models"}
+                  </button>
+                </div>
+
+                <div className="mt-2 flex flex-col gap-0.5">
+                  {p.models.length === 0 ? (
+                    <p className="text-[12px] text-ws-disabled px-2 py-1">
+                      No models yet — click Fetch
+                    </p>
                   ) : (
-                    <Eye className="size-3.5" />
+                    p.models.map((m) => (
+                      <div
+                        key={m.id}
+                        className="flex items-center gap-2 rounded-[6px] px-2 py-1 hover:bg-hover"
+                      >
+                        <span className="text-[12.5px] text-foreground font-mono truncate">
+                          {m.name}
+                        </span>
+                        {m.hidden ? (
+                          <span className="text-[10px] text-ws-disabled border border-ws-border rounded-full px-1.5 py-0.5">
+                            hidden
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => toggleModelHidden(p.id, m.id)}
+                          aria-label={m.hidden ? "Show" : "Hide"}
+                          className="ml-auto inline-flex items-center justify-center size-6 rounded-[6px] text-ws-secondary hover:bg-card-ws hover:text-foreground focus-ring"
+                        >
+                          {m.hidden ? (
+                            <EyeOff className="size-3.5" />
+                          ) : (
+                            <Eye className="size-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    ))
                   )}
-                </button>
+                </div>
               </div>
-            ))}
-            {isOllama ? (
-              <div className="flex justify-end mt-1">
-                <button
-                  type="button"
-                  onClick={onDetect}
-                  disabled={detecting}
-                  className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 focus-ring disabled:opacity-60"
-                >
-                  {detecting ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="size-3.5" />
-                  )}
-                  {detecting ? "Detecting..." : "Detect models"}
-                </button>
-              </div>
-            ) : null}
-          </>
+            );
+          })
         )}
       </div>
     </div>
@@ -274,6 +356,21 @@ export function SettingsModal() {
   const providers = useProvidersStore((s) => s.providers);
   const addProvider = useProvidersStore((s) => s.addProvider);
   const removeProvider = useProvidersStore((s) => s.removeProvider);
+
+  // Visible provider models (from connected providers, non-hidden) — used to
+  // populate the General tab's default-model picker instead of the old static
+  // built-in model list.
+  const visibleModels = React.useMemo(() => {
+    const out: { id: string; label: string }[] = [];
+    for (const p of providers) {
+      if (!isConnected(p)) continue;
+      for (const m of p.models) {
+        if (m.hidden) continue;
+        out.push({ id: m.id, label: m.name });
+      }
+    }
+    return out;
+  }, [providers]);
 
   const [newSkill, setNewSkill] = React.useState("");
   const [tab, setTab] = React.useState("general");
@@ -428,7 +525,14 @@ export function SettingsModal() {
                   />
                 </div>
                 <FieldRow label="Default model" htmlFor="settings-model">
-                  <Select value={defaultModelId} onValueChange={setDefaultModelId}>
+                  <Select
+                    value={
+                      visibleModels.some((m) => m.id === defaultModelId)
+                        ? defaultModelId
+                        : undefined
+                    }
+                    onValueChange={setDefaultModelId}
+                  >
                     <SelectTrigger
                       id="settings-model"
                       className="focus-ring bg-card-ws border-ws-border text-[13px] w-full"
@@ -436,11 +540,25 @@ export function SettingsModal() {
                       <SelectValue placeholder="Select default model" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-ws-border">
-                      {MODELS.map((m) => (
-                        <SelectItem key={m.id} value={m.id} className="text-[13px]">
-                          {m.name}
+                      {visibleModels.length === 0 ? (
+                        <SelectItem
+                          value="__none__"
+                          disabled
+                          className="text-[13px]"
+                        >
+                          No models available
                         </SelectItem>
-                      ))}
+                      ) : (
+                        visibleModels.map((m) => (
+                          <SelectItem
+                            key={m.id}
+                            value={m.id}
+                            className="text-[13px]"
+                          >
+                            {m.label}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </FieldRow>
@@ -473,8 +591,8 @@ export function SettingsModal() {
                       Model providers
                     </span>
                     <span className="text-[12px] text-ws-secondary">
-                      Configure API endpoints and keys. Ollama models are
-                      auto-detected locally.
+                      Configure API endpoints and keys. Use Fetch models to load
+                      available models from each provider.
                     </span>
                   </div>
                   <button
@@ -506,34 +624,7 @@ export function SettingsModal() {
             </TabsContent>
 
             <TabsContent value="models" className="mt-4">
-              <div className="grid gap-2">
-                {MODELS.map((m) => (
-                  <div
-                    key={m.id}
-                    className="flex items-start justify-between rounded-lg border border-ws-border bg-card-ws px-3 py-2.5"
-                  >
-                    <div className="grid gap-0.5 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] text-foreground truncate">
-                          {m.name}
-                        </span>
-                        <Badge
-                          variant="secondary"
-                          className="text-[10px] bg-hover text-ws-secondary border border-ws-border-soft"
-                        >
-                          {m.multiplier === 0 ? "unlimited" : `${m.multiplier}x`}
-                        </Badge>
-                      </div>
-                      <p className="text-[12px] text-ws-secondary truncate">
-                        {m.description}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-ws-disabled font-mono ml-3 shrink-0">
-                      {m.contextWindow}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <ModelsTabContent />
             </TabsContent>
 
             <TabsContent value="agents" className="mt-4">

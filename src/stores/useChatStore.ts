@@ -514,28 +514,26 @@ export const useChatStore = create<ChatState>()(
     {
       name: "forge-conversations",
       partialize: (s) => ({ conversations: s.conversations }),
-      onRehydrateStorage: () => ({
-        onRehydrate: (state) => {
-          if (!state) return;
-          // a conversation that was mid-stream when the page closed is
-          // treated as stopped; running steps are marked done.
-          for (const id of Object.keys(state.conversations)) {
-            const c = state.conversations[id];
-            c.streaming = false;
-            if (!c.title) c.title = "";
-            if (!c.updatedAt) c.updatedAt = Date.now();
-            if (!c.buildMode) c.buildMode = "build";
-            if (!Array.isArray(c.skills)) c.skills = [];
-            if (typeof c.agentId !== "string") c.agentId = "";
-            c.steps = c.steps.map((st) =>
-              st.status === "running" ? { ...st, status: "done" } : st
-            );
-            c.messages = c.messages.map((m) =>
-              m.streaming ? { ...m, streaming: false } : m
-            );
-          }
-        },
-      }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        // a conversation that was mid-stream when the page closed is
+        // treated as stopped; running steps are marked done.
+        for (const id of Object.keys(state.conversations)) {
+          const c = state.conversations[id];
+          c.streaming = false;
+          if (!c.title) c.title = "";
+          if (!c.updatedAt) c.updatedAt = Date.now();
+          if (!c.buildMode) c.buildMode = "build";
+          if (!Array.isArray(c.skills)) c.skills = [];
+          if (typeof c.agentId !== "string") c.agentId = "";
+          c.steps = c.steps.map((st) =>
+            st.status === "running" ? { ...st, status: "done" } : st
+          );
+          c.messages = c.messages.map((m) =>
+            m.streaming ? { ...m, streaming: false } : m
+          );
+        }
+      },
     }
   )
 );

@@ -15,6 +15,7 @@ interface ProvidersState {
   removeProvider: (id: string) => void;
   setProviderModels: (id: string, models: ProviderModel[]) => void;
   toggleModelHidden: (providerId: string, modelId: string) => void;
+  detectProviderModels: (providerId: string) => Promise<ProviderModel[]>;
   detectOllama: (baseUrl?: string) => Promise<ProviderModel[]>;
 }
 
@@ -172,49 +173,60 @@ export const useProvidersStore = create<ProvidersState>()(
           ),
         })),
 
-      detectOllama: async (baseUrl) => {
-        // target the ollama provider matching the given baseUrl; fall back to
-        // the first ollama provider; create one if none exists.
-        const url = baseUrl || "http://localhost:11434";
-        const ollama =
-          get().providers.find(
-            (p) => p.type === "ollama" && (!baseUrl || p.baseUrl === baseUrl)
-          ) || get().providers.find((p) => p.type === "ollama");
+      detectProviderModels: async (providerId) => {
+        const provider = get().providers.find((p) => p.id === providerId);
+        if (!provider) return [];
         set({ detecting: true });
         try {
-          const res = await fetch(
-            `/api/models/ollama?baseUrl=${encodeURIComponent(url)}`
-          );
+          const params = new URLSearchParams({
+            baseUrl: provider.baseUrl,
+            apiKey: provider.apiKey,
+            type: provider.type,
+          });
+          const res = await fetch(`/api/models?${params.toString()}`);
           const data = (await res.json()) as {
             detected: boolean;
             models: string[];
+            error: string | null;
           };
-          const targetId = ollama?.id || "ollama";
-          const models: ProviderModel[] = data.models.map((name) => ({
-            name,
-            id: modelIdFor(targetId, name),
-          }));
-          if (ollama) {
-            // preserve hidden flags for models that already existed
-            const prev = ollama.models;
-            const merged = models.map(
-              (m) => prev.find((pm) => pm.name === m.name) ?? m
-            );
-            get().setProviderModels(ollama.id, merged);
-          } else {
-            get().addProvider({
-              name: "Ollama (local)",
-              type: "ollama",
-              baseUrl: url,
-              apiKey: "",
-              enabled: true,
-              models,
-            });
-          }
+          const prev = provider.models;
+          // preserve hidden flags for models that already existed
+          const models: ProviderModel[] = data.models.map((name) => {
+            const existing = prev.find((pm) => pm.name === name);
+            return {
+              name,
+              id: modelIdFor(providerId, name),
+              hidden: existing?.hidden,
+            };
+          });
+          get().setProviderModels(providerId, models);
           return models;
         } finally {
           set({ detecting: false });
         }
+      },
+
+      detectOllama: async (baseUrl) => {
+        // target the ollama provider matching the given baseUrl; fall back to
+        // the first ollama provider; create one if none exists.
+        const url = baseUrl || "http://localhost:11434";
+        let ollama =
+          get().providers.find(
+            (p) => p.type === "ollama" && (!baseUrl || p.baseUrl === baseUrl)
+          ) || get().providers.find((p) => p.type === "ollama");
+        if (!ollama) {
+          const id = get().addProvider({
+            name: "Ollama (local)",
+            type: "ollama",
+            baseUrl: url,
+            apiKey: "",
+            enabled: true,
+            models: [],
+          });
+          ollama = get().providers.find((p) => p.id === id) || undefined;
+        }
+        if (!ollama) return [];
+        return get().detectProviderModels(ollama.id);
       },
     }),
     {

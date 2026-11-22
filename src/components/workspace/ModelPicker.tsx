@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   listAllModelGroups,
   resolveModelName,
+  isProviderModel,
   type ModelGroup,
   type PickModel,
 } from "@/lib/models";
@@ -20,40 +21,11 @@ import { useChatStore } from "@/stores/useChatStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useProvidersStore } from "@/stores/useProvidersStore";
 
-type EnrichedGroup = ModelGroup & { type?: string };
-
-function MultiplierBadge({ multiplier }: { multiplier: number }) {
-  let cls = "text-ws-secondary border-ws-border";
-  let label = `${multiplier}x`;
-  if (multiplier === 0) {
-    cls = "text-accent-hi border-accent-fill/30 bg-accent-fill/10";
-    label = "Unlimited";
-  } else if (multiplier === 1) {
-    cls = "text-ws-secondary border-ws-border";
-    label = "1x";
-  } else if (multiplier === 3) {
-    cls = "text-streak border-streak/30 bg-streak/10";
-    label = "3x";
-  } else if (multiplier === 5) {
-    cls = "text-streak border-streak/30 bg-streak/10";
-    label = "5x";
-  }
-  return (
-    <span
-      className={cn(
-        "text-[11px] rounded-full px-1.5 py-0.5 border whitespace-nowrap shrink-0",
-        cls
-      )}
-    >
-      {label}
-    </span>
-  );
-}
+type EnrichedGroup = ModelGroup & { type?: string; providerId?: string };
 
 /**
  * ModelPicker — a popover that lets the user switch the active model.
- * Models are sourced from every enabled provider (Simulated + OpenAI +
- * Anthropic + auto-detected Ollama) via `listAllModelGroups`, and grouped.
+ * Models come only from connected providers (no built-in/simulated models).
  * Controlled open state so callers (e.g. Composer slash command) can open it.
  */
 export function ModelPicker({
@@ -73,29 +45,30 @@ export function ModelPicker({
   const detecting = useProvidersStore((s) => s.detecting);
 
   const modelId = convModelId ?? defaultModelId;
-  const displayName = resolveModelName(modelId, providers);
+  const valid = isProviderModel(modelId, providers);
+  const displayName = valid ? resolveModelName(modelId, providers) : "";
 
-  // Build the grouped model list, tagging each provider group with its type
-  // so we can render badges. We also ensure an enabled Ollama provider always
-  // appears (even with zero detected models) so its empty/detecting state shows.
   const groups = React.useMemo<EnrichedGroup[]>(() => {
     const base = listAllModelGroups(providers);
     const enriched: EnrichedGroup[] = base.map((g) => {
-      if (g.label === "Simulated") {
-        return { ...g, type: undefined };
-      }
-      const type =
-        g.models[0]?.providerType ??
-        providers.find((p) => p.name === g.label)?.type;
-      return { ...g, type };
+      const provider = providers.find((p) => p.name === g.label);
+      return {
+        ...g,
+        type: g.models[0]?.providerType ?? provider?.type,
+        providerId: provider?.id,
+      };
     });
+    // ensure an enabled Ollama provider always appears (even with zero models)
     const hasOllama = enriched.some((g) => g.type === "ollama");
     if (!hasOllama) {
-      const ollama = providers.find(
-        (p) => p.type === "ollama" && p.enabled
-      );
+      const ollama = providers.find((p) => p.type === "ollama" && p.enabled);
       if (ollama) {
-        enriched.push({ label: ollama.name, models: [], type: "ollama" });
+        enriched.push({
+          label: ollama.name,
+          models: [],
+          type: "ollama",
+          providerId: ollama.id,
+        });
       }
     }
     return enriched;
@@ -107,7 +80,7 @@ export function ModelPicker({
     onOpenChange(false);
   };
 
-  const renderRow = (m: PickModel, isSimulated: boolean) => {
+  const renderRow = (m: PickModel, type?: string) => {
     const selected = m.id === modelId;
     return (
       <button
@@ -125,29 +98,24 @@ export function ModelPicker({
             <span className="text-[13px] font-medium text-foreground truncate">
               {m.name}
             </span>
-            {isSimulated && m.contextWindow && (
-              <span className="text-[11px] text-ws-secondary shrink-0">
-                {m.contextWindow}
-              </span>
-            )}
           </div>
           <div className="text-[12px] text-ws-secondary line-clamp-1">
-            {isSimulated ? m.description : m.providerName}
+            {m.providerName}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {isSimulated && m.multiplier !== undefined ? (
-            <MultiplierBadge multiplier={m.multiplier} />
-          ) : !isSimulated && m.providerType ? (
+          {type && (
             <span className="text-[10px] rounded-full px-1.5 py-0.5 border text-ws-secondary border-ws-border whitespace-nowrap">
-              {m.providerType}
+              {type}
             </span>
-          ) : null}
+          )}
           {selected && <Check className="size-3.5 text-accent-hi shrink-0" />}
         </div>
       </button>
     );
   };
+
+  const empty = groups.every((g) => g.models.length === 0);
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
@@ -156,11 +124,12 @@ export function ModelPicker({
           type="button"
           className={cn(
             "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[8px]",
-            "border border-ws-border bg-card-ws text-[13px] text-foreground",
-            "hover:bg-hover transition-colors focus-ring max-w-[180px]"
+            "border border-ws-border bg-card-ws text-[13px]",
+            valid ? "text-foreground" : "text-ws-secondary",
+            "hover:bg-hover transition-colors focus-ring max-w-[200px]"
           )}
         >
-          <span className="truncate">{displayName}</span>
+          <span className="truncate">{displayName || "Select model"}</span>
           <ChevronDown className="size-3.5 text-ws-secondary shrink-0" />
         </button>
       </PopoverTrigger>
@@ -173,10 +142,15 @@ export function ModelPicker({
         )}
       >
         <div className="ws-scroll max-h-[340px] overflow-y-auto">
+          {empty && !detecting && (
+            <div className="text-[12px] text-ws-disabled px-2.5 py-3">
+              No models yet — connect a provider in Settings and fetch models.
+            </div>
+          )}
           {groups.map((group) => {
-            const isSimulated = group.label === "Simulated";
             const isOllama = group.type === "ollama";
-            const showEmpty = isOllama && group.models.length === 0 && !detecting;
+            const showEmpty =
+              group.models.length === 0 && !detecting;
             return (
               <div key={group.label}>
                 <div className="text-[11px] uppercase tracking-wide text-ws-secondary px-2.5 pt-2 pb-1 flex items-center gap-1.5">
@@ -195,12 +169,13 @@ export function ModelPicker({
                 )}
                 {showEmpty ? (
                   <div className="text-[12px] text-ws-disabled px-2.5 py-2">
-                    No models detected — run `ollama serve` and click Detect in
-                    Settings
+                    {isOllama
+                      ? "No models detected — run `ollama serve` and click Detect in Settings"
+                      : "No models — click Fetch in Settings"}
                   </div>
                 ) : (
                   <div className="flex flex-col gap-0.5">
-                    {group.models.map((m) => renderRow(m, isSimulated))}
+                    {group.models.map((m) => renderRow(m, group.type))}
                   </div>
                 )}
               </div>

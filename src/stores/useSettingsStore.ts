@@ -44,7 +44,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       apiKey: "",
       baseUrl: "https://api.openai.com/v1",
-      defaultModelId: "forge-flash",
+      defaultModelId: "",
       theme: "dark",
       agentInstructions: DEFAULT_INSTRUCTIONS,
       skills: [

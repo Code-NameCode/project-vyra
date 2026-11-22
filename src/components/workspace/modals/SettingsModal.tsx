@@ -1,7 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  FolderOpen,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +84,7 @@ function ProviderCard({
   onRemove: (p: Provider) => void;
 }) {
   const updateProvider = useProvidersStore((s) => s.updateProvider);
+  const toggleModelHidden = useProvidersStore((s) => s.toggleModelHidden);
   const detectOllama = useProvidersStore((s) => s.detectOllama);
   const detecting = useProvidersStore((s) => s.detecting);
   const isOllama = provider.type === "ollama";
@@ -157,25 +167,83 @@ function ProviderCard({
         )}
       </div>
 
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-[12px] text-ws-secondary">
-          {provider.models.length} model(s)
-        </span>
-        {isOllama ? (
-          <button
-            type="button"
-            onClick={onDetect}
-            disabled={detecting}
-            className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 focus-ring disabled:opacity-60"
-          >
-            {detecting ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="size-3.5" />
-            )}
-            {detecting ? "Detecting..." : "Detect models"}
-          </button>
-        ) : null}
+      <div className="mt-2 flex flex-col gap-0.5">
+        <div className="flex items-center justify-between px-2">
+          <span className="text-[11px] uppercase tracking-wide text-ws-secondary">
+            Models
+          </span>
+          <span className="text-[11px] text-ws-secondary">
+            {provider.models.length}
+          </span>
+        </div>
+
+        {provider.models.length === 0 ? (
+          <div className="flex items-center justify-between px-2">
+            <span className="text-[12px] text-ws-disabled py-1">No models</span>
+            {isOllama ? (
+              <button
+                type="button"
+                onClick={onDetect}
+                disabled={detecting}
+                className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 focus-ring disabled:opacity-60"
+              >
+                {detecting ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
+                {detecting ? "Detecting..." : "Detect models"}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            {provider.models.map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center gap-2 rounded-[6px] px-2 py-1 hover:bg-hover"
+              >
+                <span className="text-[12.5px] text-foreground font-mono truncate">
+                  {m.name}
+                </span>
+                {m.hidden ? (
+                  <span className="text-[10px] text-ws-disabled border border-ws-border rounded-full px-1.5 py-0.5">
+                    hidden
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => toggleModelHidden(provider.id, m.id)}
+                  aria-label={m.hidden ? "Show model" : "Hide model"}
+                  className="ml-auto inline-flex items-center justify-center size-6 rounded-[6px] text-ws-secondary hover:bg-card-ws hover:text-foreground focus-ring"
+                >
+                  {m.hidden ? (
+                    <EyeOff className="size-3.5" />
+                  ) : (
+                    <Eye className="size-3.5" />
+                  )}
+                </button>
+              </div>
+            ))}
+            {isOllama ? (
+              <div className="flex justify-end mt-1">
+                <button
+                  type="button"
+                  onClick={onDetect}
+                  disabled={detecting}
+                  className="inline-flex items-center gap-2 h-8 px-3 rounded-[8px] bg-accent-fill text-white text-[13px] hover:opacity-90 focus-ring disabled:opacity-60"
+                >
+                  {detecting ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-3.5" />
+                  )}
+                  {detecting ? "Detecting..." : "Detect models"}
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );
@@ -198,6 +266,8 @@ export function SettingsModal() {
   const skills = useSettingsStore((s) => s.skills);
   const addSkill = useSettingsStore((s) => s.addSkill);
   const removeSkill = useSettingsStore((s) => s.removeSkill);
+  const skillsFolderPath = useSettingsStore((s) => s.skillsFolderPath);
+  const setSkillsFolderPath = useSettingsStore((s) => s.setSkillsFolderPath);
   const useRealApi = useSettingsStore((s) => s.useRealApi);
   const setUseRealApi = useSettingsStore((s) => s.setUseRealApi);
 
@@ -248,6 +318,46 @@ export function SettingsModal() {
     if (!v) return;
     addSkill(v);
     setNewSkill("");
+  };
+
+  const folderInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    const el = folderInputRef.current;
+    if (el) {
+      el.setAttribute("webkitdirectory", "");
+    }
+  }, []);
+
+  const onFolderPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) {
+      e.target.value = "";
+      return;
+    }
+    const first = fileList[0] as File & { webkitRelativePath?: string };
+    const rel = first.webkitRelativePath;
+    if (rel) {
+      const folderName = rel.split("/")[0];
+      if (folderName) setSkillsFolderPath(folderName);
+    }
+    const added = new Set<string>();
+    for (let i = 0; i < fileList.length; i++) {
+      const name = fileList[i].name;
+      const lower = name.toLowerCase();
+      if (!lower.endsWith(".md") && !lower.endsWith(".txt")) continue;
+      const base = name.replace(/\.[^.]+$/, "");
+      if (!base) continue;
+      if (skills.includes(base) || added.has(base)) continue;
+      addSkill(base);
+      added.add(base);
+    }
+    if (added.size > 0) {
+      toast.success(`${added.size} skill(s) imported from folder`);
+    } else {
+      toast("No skill files found in folder");
+    }
+    e.target.value = "";
   };
 
   return (
@@ -438,7 +548,47 @@ export function SettingsModal() {
             </TabsContent>
 
             <TabsContent value="skills" className="mt-4">
-              <div className="grid gap-3">
+              <div className="grid gap-1.5">
+                <div className="grid gap-0.5">
+                  <span className="text-[14px] font-medium text-foreground">
+                    Skills folder
+                  </span>
+                  <span className="text-[12px] text-ws-secondary">
+                    Pick a local folder of skill files (.md). Detected skills
+                    are added below.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    readOnly
+                    value={skillsFolderPath || "No folder selected"}
+                    aria-label="Skills folder path"
+                    className="bg-card-ws border border-ws-border h-9 text-[13px] flex-1 font-mono focus-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => folderInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 h-9 px-3 rounded-[8px] border border-ws-border bg-card-ws text-[13px] hover:bg-hover focus-ring"
+                  >
+                    <FolderOpen className="size-3.5" />
+                    Browse
+                  </button>
+                </div>
+                <input
+                  ref={(el) => {
+                    folderInputRef.current = el;
+                    if (el) el.setAttribute("webkitdirectory", "");
+                  }}
+                  type="file"
+                  multiple
+                  accept=".md,.txt"
+                  onChange={onFolderPicked}
+                  aria-hidden
+                  className="hidden"
+                />
+              </div>
+
+              <div className="grid gap-3 mt-4">
                 <div className="flex flex-wrap gap-2">
                   {skills.length === 0 ? (
                     <p className="text-[12.5px] text-ws-disabled">

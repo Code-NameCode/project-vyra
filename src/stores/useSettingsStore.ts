@@ -10,6 +10,7 @@ interface SettingsState {
   theme: "dark" | "light";
   agentInstructions: string;
   skills: string[];
+  skillsFolderPath: string;
   useRealApi: boolean;
 
   setApiKey: (v: string) => void;
@@ -18,6 +19,7 @@ interface SettingsState {
   setTheme: (v: "dark" | "light") => void;
   setAgentInstructions: (v: string) => void;
   setUseRealApi: (v: boolean) => void;
+  setSkillsFolderPath: (v: string) => void;
   addSkill: (s: string) => void;
   removeSkill: (s: string) => void;
 }
@@ -52,6 +54,7 @@ export const useSettingsStore = create<SettingsState>()(
         "Code review",
         "Image generation",
       ],
+      skillsFolderPath: "",
       useRealApi: false,
 
       setApiKey: (v) => set({ apiKey: v }),
@@ -60,6 +63,7 @@ export const useSettingsStore = create<SettingsState>()(
       setTheme: (v) => set({ theme: v }),
       setAgentInstructions: (v) => set({ agentInstructions: v }),
       setUseRealApi: (v) => set({ useRealApi: v }),
+      setSkillsFolderPath: (v) => set({ skillsFolderPath: v }),
       addSkill: (s) =>
         set((st) =>
           st.skills.includes(s) ? st : { skills: [...st.skills, s] }

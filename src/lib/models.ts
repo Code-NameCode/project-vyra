@@ -34,10 +34,11 @@ export function listAllModelGroups(providers: Provider[]): ModelGroup[] {
   ];
   for (const p of providers) {
     if (!p.enabled) continue;
-    if (p.models.length === 0) continue;
+    const visible = p.models.filter((m) => !m.hidden);
+    if (visible.length === 0) continue;
     groups.push({
       label: p.name,
-      models: p.models.map((m) => ({
+      models: visible.map((m) => ({
         id: m.id,
         name: m.name,
         providerName: p.name,

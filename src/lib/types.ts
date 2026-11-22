@@ -123,6 +123,7 @@ export type ProviderType = "openai" | "anthropic" | "ollama" | "custom";
 export interface ProviderModel {
   id: string; // unified id: `${providerId}:${modelName}`
   name: string; // display name
+  hidden?: boolean; // hide from the model picker when true
 }
 
 export interface Provider {

@@ -1,0 +1,47 @@
+[
+  {
+    "id": "forge-flash",
+    "name": "Forge Flash",
+    "description": "Fast and lightweight. Great for quick edits and chat.",
+    "multiplier": 1,
+    "supportsImages": true,
+    "contextWindow": "128k",
+    "tier": "free"
+  },
+  {
+    "id": "forge-pro",
+    "name": "Forge Pro",
+    "description": "Balanced reasoning and speed for everyday builds.",
+    "multiplier": 3,
+    "supportsImages": true,
+    "contextWindow": "200k",
+    "tier": "pro"
+  },
+  {
+    "id": "forge-max",
+    "name": "Forge Max",
+    "description": "Deepest reasoning. Best for planning and refactors.",
+    "multiplier": 5,
+    "supportsImages": true,
+    "contextWindow": "1M",
+    "tier": "pro"
+  },
+  {
+    "id": "forge-flash-mini",
+    "name": "Forge Flash Mini",
+    "description": "Smallest, fastest. Unlimited daily usage.",
+    "multiplier": 0,
+    "supportsImages": false,
+    "contextWindow": "64k",
+    "tier": "unlimited"
+  },
+  {
+    "id": "forge-chat-mini",
+    "name": "Forge Chat Mini",
+    "description": "Chat-only model. Unlimited daily usage.",
+    "multiplier": 0,
+    "supportsImages": false,
+    "contextWindow": "32k",
+    "tier": "unlimited"
+  }
+]

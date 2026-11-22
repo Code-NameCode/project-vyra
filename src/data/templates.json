@@ -1,0 +1,98 @@
+[
+  {
+    "id": "crosscut",
+    "title": "Crosscut",
+    "category": "SaaS",
+    "featured": true,
+    "prompt": "Build a SaaS landing page for Crosscut, a tool that slices video into shareable clips with AI. Include hero, feature grid, pricing, and a sticky nav.",
+    "thumbKey": "crosscut"
+  },
+  {
+    "id": "retro-terminal",
+    "title": "Retro terminal",
+    "category": "Starters",
+    "featured": true,
+    "prompt": "Build a retro terminal-themed portfolio starter with a boot sequence, scanline overlay, and a typing prompt.",
+    "thumbKey": "retro-terminal"
+  },
+  {
+    "id": "creative-agency",
+    "title": "Creative agency",
+    "category": "Landing pages",
+    "featured": true,
+    "prompt": "Build a bold creative agency landing page with large typography, a marquee of services, and a grid of case studies.",
+    "thumbKey": "creative-agency"
+  },
+  {
+    "id": "look-out-below",
+    "title": "Look Out Below",
+    "category": "Games",
+    "featured": true,
+    "prompt": "Build a small browser game called Look Out Below where the player dodges falling objects and collects coins.",
+    "thumbKey": "look-out-below"
+  },
+  {
+    "id": "climate-story",
+    "title": "Climate data story",
+    "category": "Stores",
+    "featured": true,
+    "prompt": "Build a scrollytelling climate data story with animated charts showing global temperature change over the last century.",
+    "thumbKey": "climate-story"
+  },
+  {
+    "id": "fusion-energy",
+    "title": "Fusion energy",
+    "category": "Portfolio",
+    "featured": true,
+    "prompt": "Build a portfolio for a fusion energy research lab with an interactive reactor diagram and project case studies.",
+    "thumbKey": "fusion-energy"
+  },
+  {
+    "id": "minimal-store",
+    "title": "Minimal store",
+    "category": "Stores",
+    "featured": false,
+    "prompt": "Build a minimal e-commerce store front with a product grid, cart drawer, and checkout flow.",
+    "thumbKey": "minimal-store"
+  },
+  {
+    "id": "dev-portfolio",
+    "title": "Dev portfolio",
+    "category": "Portfolio",
+    "featured": false,
+    "prompt": "Build a developer portfolio with a hero, project showcase, and a contact form.",
+    "thumbKey": "dev-portfolio"
+  },
+  {
+    "id": "saas-dashboard",
+    "title": "SaaS dashboard",
+    "category": "SaaS",
+    "featured": false,
+    "prompt": "Build a SaaS analytics dashboard with KPI cards, a line chart, and a data table.",
+    "thumbKey": "saas-dashboard"
+  },
+  {
+    "id": "pixel-platformer",
+    "title": "Pixel platformer",
+    "category": "Games",
+    "featured": false,
+    "prompt": "Build a pixel-art platformer game with a player that jumps between platforms and collects gems.",
+    "thumbKey": "pixel-platformer"
+  },
+  {
+    "id": "starter-next",
+    "title": "Next starter",
+    "category": "Starters",
+    "featured": false,
+    "prompt": "Build a minimal Next.js starter with a layout, a home page, and a couple of demo routes.",
+    "thumbKey": "starter-next"
+  },
+  {
+    "id": "agency-studio",
+    "title": "Agency studio",
+    "category": "Landing pages",
+    "featured": false,
+    "prompt": "Build a studio landing page with a fullscreen hero video placeholder, services, and a team grid.",
+    "thumbKey": "agency-studio"
+  }
+]
